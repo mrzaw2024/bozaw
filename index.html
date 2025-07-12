@@ -113,6 +113,69 @@
       color: #c62828;
       background-color: rgba(198, 40, 40, 0.1);
     }
+    /* Styles from me.html for VIP TIP section */
+    .vip-box {
+      font-family: Arial, sans-serif;
+      background: #0f111a;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+      border-radius: 10px;
+      margin: 10px auto;
+      max-width: 600px;
+    }
+    .vip-box h1 {
+      color: #00e5ff;
+    }
+    .vip-box .box {
+      border: 1px solid #444;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 10px auto;
+      max-width: 600px;
+      background-color: #1c1f2e;
+    }
+    .vip-box .big {
+      color: #00ff6e;
+      font-weight: bold;
+    }
+    .vip-box .small {
+      color: #ff6a00;
+      font-weight: bold;
+    }
+    .vip-box pre {
+      text-align: left;
+      background: #2c2f48;
+      padding: 10px;
+      border-radius: 8px;
+      overflow-x: auto;
+      color: #ccc;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .vip-box input {
+      padding: 8px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: none;
+      margin: 5px;
+      width: 160px;
+    }
+    .vip-box button {
+      padding: 8px 16px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      background-color: #00e5ff;
+      color: #000;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .vip-box #updated {
+      font-size: 14px;
+      color: #aaa;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -128,6 +191,7 @@
   <div class="tab-container">
     <div class="tab active" onclick="switchTab('blockAnalysis')">Block Analysis</div>
     <div class="tab" onclick="switchTab('digitPrediction')">Digit Prediction</div>
+    <div class="tab" onclick="switchTab('blockHashVip')">Block Hash VIP TIP</div>
   </div>
 
   <div id="timerDisplay" style="text-align: right; margin-bottom: 10px;"></div>
@@ -138,7 +202,7 @@
       <h2>🎯 Block Hash Analysis</h2>
 
       <label for="startBlock">📦 Start Block Number:</label><br>
-      <input type="number" id="startBlock" value="73793722"><br>
+      <input type="number" id="startBlock" value="73030858"><br>
 
       <label for="count">🔢 Number of Blocks:</label><br>
       <input type="number" id="count" value="5"><br>
@@ -192,6 +256,25 @@
       <div id="aiSummary" style="margin-top:10px;"></div>
     </div>
   </div>
+
+  <!-- Block Hash VIP TIP Tab -->
+  <div id="blockHashVip" class="tab-content">
+    <div class="vip-box">
+      <h1>🔮 Block Hash VIP TIP </h1>
+
+      <div class="box">
+        <input type="number" id="startBlockVip" placeholder="Start Block Number" />
+        <input type="number" id="countBlockVip" placeholder="How Many Blocks?" />
+        <button onclick="loadBlocksVip()">🔍 View</button>
+      </div>
+
+      <div class="box" id="resultBoxVip">
+        <p>➡️ Fill in the block number and count.</p>
+      </div>
+
+      <p id="updatedVip">⏱ Last updated: -</p>
+    </div>
+  </div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
@@ -215,12 +298,13 @@ let blockData = [];
 
 // Big/Small prediction numbers from 2dd.html
 const bigNumbers = [
-      99, 55, 04, 07, 08,
-      10, 13, 18, 21, 23, 25, 29,
-      37, 35, 36, 39, 32, 41, 42, 47, 49,
-      50, 51, 52, 54, 59,
-      71, 72, 74, 78, 75, 76, 81, 83, 87, 86, 91, 95, 96
-    ];
+  0, 111, 333, 444, 555, 888, 999,
+  44, 66, 77, 88, 99, 1, 4, 6, 9,
+  12, 14, 15, 18, 24, 28,
+  31, 35, 38, 39, 42, 43, 46, 47,
+  53, 56, 59, 63, 64, 68, 72, 74, 76, 78, 79,
+  83, 84, 86, 89, 94, 96
+];
 
 // Big/Small prediction function from 2dd.html
 function checkBigSmall() {
@@ -529,6 +613,66 @@ async function fetchBlocks() {
     </div>
     ${table}
   `;
+}
+
+// Functions for VIP TIP tab
+async function loadSingleBlockVip(blockNum) {
+  const url = `https://apilist.tronscanapi.com/api/block?sort=-number&start=0&limit=1&number=${blockNum}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data.data?.[0];
+}
+
+async function loadBlocksVip() {
+  const startInput = document.getElementById("startBlockVip");
+  const countInput = document.getElementById("countBlockVip");
+
+  const startBlock = parseInt(startInput.value);
+  const blockCount = parseInt(countInput.value);
+
+  if (isNaN(startBlock) || startBlock <= 0 || isNaN(blockCount) || blockCount <= 0) {
+    alert("❌ Please enter valid numbers.");
+    return;
+  }
+
+  const resultBox = document.getElementById("resultBoxVip");
+  resultBox.innerHTML = "⏳ Loading...";
+
+  let bigCount = 0;
+  let smallCount = 0;
+  let results = [];
+
+  for (let i = 0; i < blockCount; i++) {
+    const blockNumber = startBlock - i * 20;
+    try {
+      const block = await loadSingleBlockVip(blockNumber);
+      if (block && block.hash) {
+        const lastChar = block.hash.slice(-1).toLowerCase();
+        const isBig = "89abcdef".includes(lastChar);
+        if (isBig) bigCount++; else smallCount++;
+
+        results.push(`#${block.number} → ${block.hash.slice(-6)} → <span class="${isBig ? 'big' : 'small'}">${isBig ? 'Big' : 'Small'}</span>`);
+      } else {
+        results.push(`#${blockNumber} → ❌ Block not found`);
+      }
+    } catch (e) {
+      results.push(`#${blockNumber} → ❌ Error fetching block`);
+    }
+  }
+
+  const total = bigCount + smallCount;
+  const bigPercent = total ? ((bigCount / total) * 100).toFixed(2) : "0.00";
+  const smallPercent = total ? ((smallCount / total) * 100).toFixed(2) : "0.00";
+
+  resultBox.innerHTML = `
+    <div>
+      📊 <b>Big:</b> ${bigCount} blocks (${bigPercent}%)<br>
+      📉 <b>Small:</b> ${smallCount} blocks (${smallPercent}%)<br>
+      <hr>
+      <pre>${results.join("<br>")}</pre>
+    </div>
+  `;
+  document.getElementById("updatedVip").innerText = `⏱ Last updated: ${new Date().toLocaleTimeString()}`;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
