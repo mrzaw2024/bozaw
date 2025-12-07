@@ -552,7 +552,7 @@ async function runAIAnalysis() {
     confidenceValue.textContent = `${confidencePercent}%`;
     
     // Show analysis details in Burmese
-    const vipStatusText = nextAnalysisIsReversed ? 'ON (ပြောင်းပြန်ခန့်မှန်း)' : 'OFF (မူရင်းခန့်မှန်း)';
+    const vipStatusText = nextAnalysisIsReversed ? 'ON' : 'OFF';
     const vipStatusColor = nextAnalysisIsReversed ? '#4CAF50' : '#666';
     
     let detailsHTML = `
