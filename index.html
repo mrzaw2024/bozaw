@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lottery Analysis Tool</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      background: #f0f0f0; 
+      padding: 10px; 
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .box { 
+      background: white; 
+      border-left: 5px solid red; 
+      padding: 15px; 
+      margin-bottom: 15px; 
+      border-radius: 6px; 
+    }
+    .title { 
+      font-weight: bold; 
+      margin-bottom: 10px; 
+      font-size: 18px; 
+    }
+    input[type="text"], input[type="number"] {
+      width: 100%; 
+      padding: 10px; 
+      margin-top: 5px; 
+      font-size: 16px; 
+      box-sizing: border-box;
+    }
+    button {
+      padding: 10px; 
+      font-size: 16px; 
+      margin-top: 10px; 
+      width: 48%;
+      background: #ff5555; 
+      color: white; 
+      border: none; 
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .big-small-box {
+      display: flex; 
+      justify-content: space-around; 
+      margin-top: 10px;
+    }
+    .big-small-item {
+      border: 2px solid #ccc; 
+      padding: 10px; 
+      border-radius: 8px; 
+      min-width: 100px;
+      text-align: center; 
+      background: #f9f9f9; 
+      font-weight: bold; 
+      font-size: 18px;
+    }
+    .big-text { color: purple; }
+    .small-text { color: blue; }
+    .hidden { display: none; }
+    .win-text { color: green; font-weight: bold; }
+    .lose-text { color: red; font-weight: bold; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .tab-container {
+      display: flex;
+      margin-bottom: 15px;
+    }
+    .tab {
+      padding: 10px 20px;
+      background: #ddd;
+      cursor: pointer;
+      margin-right: 5px;
+      border-radius: 5px 5px 0 0;
+    }
+    .tab.active {
+      background: white;
+      font-weight: bold;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    /* Added styles for the new Big/Small prediction box */
+    .big-small-prediction {
+      margin-top: 25px;
+      font-size: 24px;
+      font-weight: bold;
+      text-align: center;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .big-prediction {
+      color: #2e7d32;
+      background-color: rgba(46, 125, 50, 0.1);
+    }
+    .small-prediction {
+      color: #c62828;
+      background-color: rgba(198, 40, 40, 0.1);
+    }
+
+    /* Styles for Browser Space iframe */
+    .iframe-container {
+      width: 100%;
+      height: 700px; /* adjust height if needed */
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #000;
+    }
+    .iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+    .iframe-note {
+      margin-top: 8px;
+      font-size: 14px;
+    }
+
+    /* Responsive tweak */
+    @media (max-width: 600px) {
+      .iframe-container { height: 500px; }
+      button { width: 100%; margin-top: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="box" id="loginBox">
+  <div class="title">Login with Access Key</div>
+  <input type="text" id="accessKeyInput" placeholder="Enter your key" />
+  <button onclick="verifyKey()">Login</button>
+  <div id="error" style="color:red; margin-top:10px;"></div>
+</div>
+
+<div id="appBox" class="hidden">
+  <div class="tab-container">
+    <div class="tab active" onclick="switchTab('blockAnalysis')">Block Analysis</div>
+    <div class="tab" onclick="switchTab('digitPrediction')">Digit Prediction</div>
+    <!-- New tab for Browser Space -->
+    <div class="tab" onclick="switchTab('browserSpace')">Browser Space</div>
+  </div>
+
+  <div id="timerDisplay" style="text-align: right; margin-bottom: 10px;"></div>
+
+  <!-- Block Analysis Tab -->
+  <div id="blockAnalysis" class="tab-content active">
+    <div class="box">
+      <h2>🎯 Block Hash Analysis</h2>
+
+      <label for="startBlock">📦 Start Block Number:</label><br>
+      <input type="number" id="startBlock" value="73030858"><br>
+
+      <label for="count">🔢 Number of Blocks:</label><br>
+      <input type="number" id="count" value="5"><br>
+
+      <button onclick="fetchBlocks()">🚀 Get Block Hashes</button>
+
+      <div id="output" style="margin-top:20px;"></div>
+    </div>
+  </div>
+
+  <!-- Digit Prediction Tab -->
+  <div id="digitPrediction" class="tab-content">
+    <div class="box">
+      <div class="title">BIG & SMALL</div>
+      <div class="big-small-box">
+        <div class="big-small-item small-text" id="smallBox">SMALL (0)</div>
+        <div class="big-small-item big-text" id="bigBox">BIG (0)</div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="title">AI Prediction: <span id="aiPredictAbove">-</span></div>
+      <div class="title">Enter Number</div>
+      <input type="text" id="inputNumber" placeholder="Enter digits" />
+      <div style="display:flex; justify-content:space-between; gap:4%;">
+        <button onclick="handleOK()">OK</button>
+        <button onclick="handleSearch()">Search</button>
+      </div>
+    </div>
+
+    <!-- Added Big/Small Prediction Box -->
+    <div class="box">
+      <div class="title">Big/Small Prediction</div>
+      <input type="text" id="numberInput" placeholder="Enter number" />
+      <button onclick="checkBigSmall()">Check</button>
+      <div id="resultText" class="big-small-prediction"></div>
+    </div>
+
+    <div class="box">
+      <div class="title">Save Number</div>
+      <div id="saveNumberDisplay">-</div>
+      <button onclick="copySaved()">Copy</button>
+      <button onclick="clearSaved()">Delete</button>
+    </div>
+
+    <div class="box">
+      <div class="title">AI Prediction</div>
+      <div id="aiPrediction">Next digit guess: <b>-</b></div>
+      <label>Show last results: <input type="number" id="aiLimit" value="10" /></label>
+      <div id="aiHistory" style="margin-top:10px; font-size:14px;"></div>
+      <div id="aiSummary" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- Browser Space Tab (new) -->
+  <div id="browserSpace" class="tab-content">
+    <div class="box">
+      <div class="title">Browser Space — Embedded</div>
+      <div class="iframe-container" id="iframeContainer">
+        <!-- iframe to target site; may be blocked by X-Frame-Options -->
+        <iframe id="browserFrame" src="https://6r6c8h.com/#/login" frameborder="0" sandbox="allow-scripts allow-forms allow-same-origin"></iframe>
+      </div>
+      <div class="iframe-note">
+        If the site doesn't load inside the embedded view (some sites block embedding), open it in a new tab:
+        <div style="margin-top:8px;">
+          <button onclick="window.open('https://6r6c8h.com/#/login', '_blank')">Open Browser Space in new tab</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDdssjVzy2WvEiw_zzzrW_1b_wEV6qzeEY",
+  authDomain: "money-277c2.firebaseapp.com",
+  databaseURL: "https://money-277c2-default-rtdb.firebaseio.com",
+  projectId: "money-277c2",
+  storageBucket: "money-277c2.appspot.com",
+  messagingSenderId: "928037596334",
+  appId: "1:928037596334:android:8c57197c6f4369660cd13f"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let saved = "";
+let blockData = [];
+
+// Big/Small prediction numbers from 2dd.html
+const bigNumbers = [
+  0, 111, 333, 444, 555, 888, 999,
+  44, 66, 77, 88, 99, 1, 4, 6, 9,
+  12, 14, 15, 18, 24, 28,
+  31, 35, 38, 39, 42, 43, 46, 47,
+  53, 56, 59, 63, 64, 68, 72, 74, 76, 78, 79,
+  83, 84, 86, 89, 94, 96
+];
+
+// Big/Small prediction function from 2dd.html
+function checkBigSmall() {
+  const input = document.getElementById('numberInput').value.trim();
+  const number = parseInt(input, 10);
+  const resultEl = document.getElementById('resultText');
+
+  if (isNaN(number)) {
+    resultEl.textContent = 'Please enter a valid number';
+    resultEl.className = 'big-small-prediction';
+    return;
+  }
+
+  if (bigNumbers.includes(number)) {
+    resultEl.textContent = 'Big';
+    resultEl.className = 'big-small-prediction big-prediction';
+  } else {
+    resultEl.textContent = 'Small';
+    resultEl.className = 'big-small-prediction small-prediction';
+  }
+}
+
+// Tab switching function
+function switchTab(tabId) {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelectorAll('.tab-content').forEach(content => {
+    content.classList.remove('active');
+  });
+  
+  // find matching tab element and add active class (keeps existing approach)
+  const tabSelector = `.tab[onclick="switchTab('${tabId}')"]`;
+  const tabElem = document.querySelector(tabSelector);
+  if (tabElem) tabElem.classList.add('active');
+  const contentElem = document.getElementById(tabId);
+  if (contentElem) contentElem.classList.add('active');
+}
+
+function verifyKey() {
+  const key = document.getElementById("accessKeyInput").value.trim();
+  const errorDiv = document.getElementById("error");
+  errorDiv.textContent = "";
+  db.ref("accessKeys/" + key + "/expires").get().then(snapshot => {
+    if (!snapshot.exists()) return errorDiv.textContent = "Invalid key!";
+    const expires = snapshot.val(), now = Date.now();
+    if (now >= expires) return errorDiv.textContent = "Key expired!";
+    localStorage.setItem("activeKey", key);
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("appBox").classList.remove("hidden");
+    startCountdown(expires);
+    saved = localStorage.getItem("savedNumbers") || "";
+    document.getElementById("saveNumberDisplay").innerText = saved.slice(-10);
+    updateAll();
+  }).catch(err => {
+    errorDiv.textContent = "Error verifying key.";
+    console.error(err);
+  });
+}
+
+function startCountdown(expires) {
+  const display = document.getElementById("timerDisplay");
+  function update() {
+    const now = Date.now(), diff = expires - now;
+    if (diff <= 0) {
+      display.innerText = "Session expired";
+      localStorage.removeItem("activeKey");
+      location.reload();
+      return;
+    }
+    const m = Math.floor(diff / 60000), s = Math.floor((diff % 60000) / 1000);
+    display.innerText = `Expires in: ${m}m ${s}s`;
+    setTimeout(update, 1000);
+  }
+  update();
+}
+
+function handleOK() {
+  let input = document.getElementById("inputNumber").value.trim().replace(/\D/g, '');
+  if (!input) return;
+  saved += input;
+  localStorage.setItem("savedNumbers", saved);
+  document.getElementById("inputNumber").value = "";
+  document.getElementById("saveNumberDisplay").innerText = saved.slice(-10);
+  updateAll();
+}
+
+function handleSearch() {
+  let input = document.getElementById("inputNumber").value.trim().replace(/\D/g, '');
+  if (!input || saved.length < input.length + 1) return;
+  let s = 0, b = 0;
+  for (let i = 0; i < saved.length - input.length; i++) {
+    if (saved.substr(i, input.length) === input) {
+      const next = saved[i + input.length];
+      if (!next) continue;
+      if ("01234".includes(next)) s++;
+      if ("56789".includes(next)) b++;
+    }
+  }
+  document.getElementById("smallBox").innerHTML = `SMALL (<span class="small-text">${s}</span>)`;
+  document.getElementById("bigBox").innerHTML = `BIG (<span class="big-text">${b}</span>)`;
+  saved += input.slice(-1);
+  localStorage.setItem("savedNumbers", saved);
+  document.getElementById("saveNumberDisplay").innerText = saved.slice(-10);
+  document.getElementById("inputNumber").value = "";
+  updateAll();
+}
+
+function copySaved() {
+  navigator.clipboard.writeText(saved);
+  alert("Copied!");
+}
+
+function clearSaved() {
+  saved = "";
+  localStorage.removeItem("savedNumbers");
+  document.getElementById("saveNumberDisplay").innerText = "-";
+  document.getElementById("smallBox").innerHTML = `SMALL (<span class="small-text">0</span>)`;
+  document.getElementById("bigBox").innerHTML = `BIG (<span class="big-text">0</span>)`;
+  document.getElementById("inputNumber").value = "";
+  updateAll();
+}
+
+function updateAll() {
+  aiPredict();
+}
+
+function aiPredict() {
+  if (saved.length < 2) return;
+  const freq = {};
+
+  for (let i = 0; i < saved.length - 1; i++) {
+    let key = saved[i], next = saved[i + 1];
+    if (!freq[key]) freq[key] = {};
+    if (!freq[key][next]) freq[key][next] = 0;
+    freq[key][next]++;
+  }
+
+  const last = saved[saved.length - 1];
+  if (!freq[last]) return;
+
+  const sorted = Object.entries(freq[last]).sort((a, b) => b[1] - a[1]);
+  const top3 = sorted.slice(0, 3).map(x => x[0]);
+  const topLabel = "01234".includes(top3[0]) ? "SMALL" : "BIG";
+  document.getElementById("aiPredictAbove").innerText = `${top3.join(", ")} (${topLabel})`;
+  document.getElementById("aiPrediction").innerHTML = `Next digit guesses: <b>${top3.join(", ")}</b> (${topLabel})`;
+
+  const digitStats = {};
+  for (const digit of top3) digitStats[digit] = { win: 0, lose: 0 };
+
+  let top1Win = 0, top1Lose = 0;
+
+  for (let i = 0; i < saved.length - 1; i++) {
+    const current = saved[i];
+    const next = saved[i + 1];
+    const predTable = freq[current];
+    if (!predTable) continue;
+
+    const sortedPreds = Object.entries(predTable).sort((a, b) => b[1] - a[1]);
+    const preds = sortedPreds.slice(0, 3).map(x => x[0]);
+
+    preds.forEach(predDigit => {
+      const actual = next;
+      const predictedIsBig = "56789".includes(predDigit);
+      const actualIsBig = "56789".includes(actual);
+      const result = predictedIsBig === actualIsBig ? "win" : "lose";
+      if (digitStats[predDigit]) {
+        digitStats[predDigit][result]++;
+      }
+    });
+
+    const topPred = preds[0];
+    if (topPred) {
+      const isWin = ("56789".includes(topPred) === "56789".includes(next));
+      if (isWin) top1Win++; else top1Lose++;
+    }
+  }
+
+  let detailHTML = `<br/><b>Top 1 Total:</b> <span class="win-text">Win ${top1Win}</span>, <span class="lose-text">Lose ${top1Lose}</span><br/><br/>`;
+  detailHTML += `<b>Details:</b><br/>`;
+  top3.forEach(d => {
+    const stat = digitStats[d];
+    detailHTML += `- ${d}: <span class="win-text">Win ${stat.win}</span>, <span class="lose-text">Lose ${stat.lose}</span><br/>`;
+  });
+
+  document.getElementById("aiSummary").innerHTML = detailHTML;
+
+  // Show last results history
+  const aiLimit = parseInt(document.getElementById("aiLimit").value || "10");
+  let historyHtml = "";
+  for (let i = Math.max(0, saved.length - aiLimit - 1); i < saved.length - 1; i++) {
+    const current = saved[i];
+    const next = saved[i + 1];
+    const predTable = freq[current];
+    if (!predTable) continue;
+    const sortedPreds = Object.entries(predTable).sort((a, b) => b[1] - a[1]);
+    const preds = sortedPreds.slice(0, 3).map(x => x[0]);
+    const result = preds.includes(next) ? "✅" : "❌";
+    historyHtml += `${current} → ${next} (${preds.join(", ")}) ${result}<br/>`;
+  }
+  document.getElementById("aiHistory").innerHTML = historyHtml;
+}
+
+async function fetchBlocks() {
+  const startBlock = parseInt(document.getElementById("startBlock").value);
+  const count = parseInt(document.getElementById("count").value);
+  const interval = 20;
+  const output = document.getElementById("output");
+
+  output.innerHTML = "<b>Fetching block data...</b>";
+  blockData = [];
+
+  let table = "<table border='1' cellpadding='5'><tr><th>Block Number</th><th style='display:none'>Block Hash</th><th style='display:none'>Digit</th><th>D result</th><th>Win Result</th><th>Win/Lose</th></tr>";
+
+  for (let i = 0; i < count; i++) {
+    const blockNum = startBlock + i * interval;
+    try {
+      const res = await fetch("https://api.trongrid.io/wallet/getblockbynum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ num: blockNum })
+      });
+      const data = await res.json();
+      if (data.blockID) {
+        const blockHash = data.blockID;
+        const displayHash = "***" + blockHash.slice(-5);
+
+        let digitsFromRight = [];
+        for (let j = blockHash.length - 1; j >= 0 && digitsFromRight.length < 8; j--) {
+          if (/\d/.test(blockHash[j])) {
+            digitsFromRight.push(blockHash[j]);
+          }
+        }
+
+        if (digitsFromRight.length === 8) {
+          digitsFromRight.splice(3, 1);
+        }
+
+        const extractedDigits = digitsFromRight.join('');
+        const bigCount = digitsFromRight.filter(d => parseInt(d) >= 5).length;
+        const smallCount = digitsFromRight.length - bigCount;
+        const result = (bigCount > smallCount) ? "Big" : "Small";
+
+        blockData.push([blockNum, displayHash, extractedDigits, result]);
+      } else {
+        blockData.push([blockNum, "Not Found", "-", "Skip"]);
+      }
+    } catch (e) {
+      blockData.push([blockNum, "Error", "-", "Skip"]);
+    }
+  }
+
+  let winCount = 0, loseCount = 0;
+
+  for (let i = 0; i < blockData.length - 1; i++) {
+    const prevResult = blockData[i][3];
+    const nextBlockNum = startBlock + (i + 1) * interval;
+
+    if (prevResult === "Big" || prevResult === "Small") {
+      try {
+        const res = await fetch("https://api.trongrid.io/wallet/getblockbynum", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ num: nextBlockNum })
+        });
+        const data = await res.json();
+        const fullHash = data.blockID;
+
+        const digitChar = [...fullHash].reverse().find(ch => /\d/.test(ch));
+        if (digitChar !== undefined) {
+          const digit = parseInt(digitChar);
+          const actual = digit < 5 ? "Small" : "Big";
+
+          const isWin = prevResult === actual;
+          const outcome = isWin ? "✅ Win" : "❌ Lose";
+
+          const winResultText = actual;
+          blockData[i].push(winResultText, outcome);
+
+          if (isWin) winCount++; else loseCount++;
+        } else {
+          blockData[i].push("-", "-");
+        }
+      } catch {
+        blockData[i].push("-", "-");
+      }
+    } else {
+      blockData[i].push("-", "-");
+    }
+  }
+
+  if (blockData.length > 0) {
+    blockData[blockData.length - 1].push("-", "-");
+  }
+
+  for (let i = 0; i < blockData.length; i++) {
+    const row = blockData[i];
+    table += `<tr><td>${row[0]}</td><td style="display:none">${row[1]}</td><td style="display:none">${row[2]}</td>
+      <td>${row[3]}</td>
+      <td>${row[4]}</td>
+      <td>${row[5]}</td>
+    </tr>`;
+  }
+
+  table += "</table>";
+
+  output.innerHTML = `
+    <div style="margin-bottom:10px; font-weight:bold;">
+      🏁 Total ✅ Win: <span style='color:green'>${winCount}</span> | ❌ Lose: <span style='color:red'>${loseCount}</span>
+    </div>
+    ${table}
+  `;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("inputNumber");
+  input.addEventListener("paste", function(e) {
+    e.preventDefault();
+    let paste = (e.clipboardData || window.clipboardData).getData('text');
+    paste = paste.replace(/[^0-9]/g, '');
+    const start = this.selectionStart;
+    const end = this.selectionEnd;
+    const current = this.value;
+    this.value = current.slice(0, start) + paste + current.slice(end);
+    this.setSelectionRange(start + paste.length, start + paste.length);
+  });
+
+  input.addEventListener("input", function() {
+    this.value = this.value.replace(/[^0-9]/g, "");
+  });
+
+  // Watch for changes in aiLimit input
+  document.getElementById("aiLimit").addEventListener("change", updateAll);
+  
+  // Add input validation for the new numberInput field
+  document.getElementById("numberInput").addEventListener("input", function() {
+    this.value = this.value.replace(/[^0-9]/g, "");
+  });
+});
+</script>
+</body>
+</html>
