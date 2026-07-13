@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Lottery Analysis Tool v46</title>
+  <title>Premium Lottery Analysis Tool v47</title>
   <style>
     :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f8fafc; --accent-red: #ef4444; --accent-blue: #3b82f6; --border-color: #334155; }
     body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px; max-width: 1200px; margin: 0 auto; }
@@ -28,10 +28,11 @@
     .circle.color-green { background: linear-gradient(135deg, #4ade80, #22c55e); }
     .circle.color-red { background: linear-gradient(135deg, #f87171, #ef4444); }
     .circle.color-purple { background: linear-gradient(135deg, #c084fc, #a855f7); }
+    .circle.color-skip { background: #475569; }
     .stats-counter { display: flex; gap: 20px; margin-top: 15px; font-weight: bold; background: #0f172a; padding: 10px 15px; border-radius: 8px; }
     .stat-b { color: #f87171; }
     .stat-s { color: #60a5fa; }
-    .prediction-panel { background: #0f172a; border-radius: 12px; padding: 25px 15px; margin-top: 15px; display: flex; justify-content: center; align-items: center; }
+    .prediction-panel { background: #0f172a; border-radius: 12px; padding: 25px 15px; margin-top: 15px; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 10px; }
     .pred-badge { font-size: 24px; font-weight: bold; padding: 14px 40px; border-radius: 16px; color: white; min-width: 260px; text-align: center; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
     .pred-badge.none { background: #334155; }
     .big-digit-display { font-size: 22px; font-weight: 700; display: block; }
@@ -43,6 +44,7 @@
     .status-suspended { background: #334155; color: #94a3b8; }
     .status-running { background: #15803d; color: #4ade80; animation: pulse 2s infinite; }
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+    .block-display { font-size: 14px; color: #94a3b8; margin-top: 5px; }
   </style>
 </head>
 <body>
@@ -66,7 +68,7 @@
     <div class="box">
       <div class="title">📈 Auto-Tracking Stream</div>
       <label>📦 Target Block Sequence:</label>
-      <input type="number" id="startBlock" value="84417466">
+      <input type="number" id="startBlock" value="84420346">
       
       <label>🔢 Max Stream Frame Count:</label>
       <input type="number" id="count" value="300">
@@ -79,10 +81,12 @@
 
       <div>
         <span id="liveStatus" class="status-suspended">Status: Suspended</span>
+        <span id="currentBlockDisplay" class="block-display">Block: --</span>
       </div>
 
       <div class="prediction-panel">
-        <div id="nextBlockPrediction" class="pred-badge none">စောင့်ဆိုင်းဆဲ...</div>
+        <div id="nextBlockPrediction" class="pred-badge none">⏳ စောင့်ဆိုင်းဆဲ...</div>
+        <div style="font-size:14px; color:#94a3b8;" id="predictionDetail">လုံလောက်သော ဒေတာမရှိသေးပါ</div>
       </div>
 
       <h3 style="color:#60a5fa;">📊 Matrix Trend Map (Big Road)</h3>
@@ -112,30 +116,72 @@
 </div>
 
 <script>
-// JavaScript ရပ်တန့်မှုမရှိစေရန် တိုက်ရိုက် run သည့် စနစ်ပြောင်းလဲခြင်း
-let liveIntervalId = null, currentTrackingBlock = 0, trackedResults = [], nextCalculatedBet = "Waiting";
+// ===== MAIN APPLICATION LOGIC =====
+let liveIntervalId = null;
+let currentTrackingBlock = 84420346;
+let trackedResults = [];
+let nextCalculatedBet = "Waiting";
+let isRunning = false;
 
+// ===== DATA STORAGE FUNCTIONS =====
+function saveData() {
+  try {
+    localStorage.setItem("savedTargetBlock", currentTrackingBlock);
+    localStorage.setItem("savedMaxCount", document.getElementById("count").value);
+    localStorage.setItem("savedTrackedResults", JSON.stringify(trackedResults));
+    localStorage.setItem("savedPrediction", nextCalculatedBet);
+  } catch(e) { console.log("Save error:", e); }
+}
+
+function loadData() {
+  try {
+    const storedBlock = localStorage.getItem("savedTargetBlock");
+    if (storedBlock) {
+      currentTrackingBlock = parseInt(storedBlock);
+      document.getElementById("startBlock").value = currentTrackingBlock;
+    }
+    const storedCount = localStorage.getItem("savedMaxCount");
+    if (storedCount) document.getElementById("count").value = storedCount;
+    
+    const storedResults = localStorage.getItem("savedTrackedResults");
+    if (storedResults) {
+      trackedResults = JSON.parse(storedResults);
+      if (trackedResults.length > 0) {
+        updateTrendBoard();
+        updateTableDisplay();
+        updatePredictionDisplay();
+      }
+    }
+    
+    const storedPred = localStorage.getItem("savedPrediction");
+    if (storedPred) {
+      nextCalculatedBet = storedPred;
+      updatePredictionDisplay();
+    }
+  } catch(e) { console.log("Load error:", e); }
+}
+
+// ===== AUTHENTICATION =====
 window.addEventListener('DOMContentLoaded', () => {
-  const storedBlock = localStorage.getItem("savedTargetBlock");
-  if (storedBlock) document.getElementById("startBlock").value = storedBlock;
-  const storedCount = localStorage.getItem("savedMaxCount");
-  if (storedCount) document.getElementById("count").value = storedCount;
-
-  const storedResults = localStorage.getItem("savedTrackedResults");
-  if (storedResults) {
-    trackedResults = JSON.parse(storedResults);
-    recalculateAllPredictions();
-    updateTrendBoard(); 
-    updateTableDisplay();
-  }
-  
-  // Login Bypass Security Direct Fix
   const activeKey = localStorage.getItem("activeKey");
   if (activeKey) {
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("appBox").classList.remove("hidden");
+    loadData();
   }
 });
+
+function verifyKey() {
+  const key = document.getElementById("accessKeyInput").value.trim();
+  if (key !== "") {
+    localStorage.setItem("activeKey", key);
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("appBox").classList.remove("hidden");
+    loadData();
+  } else {
+    document.getElementById("error").innerText = "Enter any key to continue";
+  }
+}
 
 function switchTab(tabId) {
   document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -145,17 +191,7 @@ function switchTab(tabId) {
   document.getElementById(tabId).classList.add('active');
 }
 
-function verifyKey() {
-  const key = document.getElementById("accessKeyInput").value.trim();
-  if (key !== "") {
-    localStorage.setItem("activeKey", key);
-    document.getElementById("loginBox").style.display = "none";
-    document.getElementById("appBox").classList.remove("hidden");
-  } else {
-    document.getElementById("error").innerText = "Enter any key to continue";
-  }
-}
-
+// ===== HASH ANALYSIS =====
 function analyzeHashData(blockHash) {
   if (!blockHash) return { result: "Skip", colorClass: "color-skip", digit: "-" };
   let targetDigit = null;
@@ -171,26 +207,24 @@ function analyzeHashData(blockHash) {
   return { result: resText, colorClass: color, digit: targetDigit };
 }
 
-function recalculateAllPredictions() {
-  for (let i = 0; i < trackedResults.length; i++) {
-    if (i === 0) { trackedResults[i].betPrediction = "Waiting"; } 
-    else { trackedResults[i].betPrediction = getPredictionFromHistory(trackedResults.slice(0, i)); }
-  }
-  nextCalculatedBet = getPredictionFromHistory(trackedResults);
-}
-
+// ===== PREDICTION ENGINE =====
 function getPredictionFromHistory(historyArray) {
   const valid = historyArray.filter(r => r.appResult === "Big" || r.appResult === "Small");
   if (valid.length < 7) return "Waiting";
 
   let consecutiveLosses = 0;
-  let fullLossesHistory = []; 
+  let fullLossesHistory = [];
 
   for (let i = valid.length - 1; i >= 0; i--) {
     const cur = valid[i];
     if (cur.betPrediction && cur.betPrediction !== "Waiting") {
       const isActualWin = (cur.betPrediction === "Big" && cur.digit >= 5) || (cur.betPrediction === "Small" && cur.digit <= 4);
-      if (!isActualWin) { consecutiveLosses++; fullLossesHistory.push(cur.betPrediction); } else { break; }
+      if (!isActualWin) {
+        consecutiveLosses++;
+        fullLossesHistory.push(cur.betPrediction);
+      } else {
+        break;
+      }
     }
   }
 
@@ -201,54 +235,63 @@ function getPredictionFromHistory(historyArray) {
   let aiBasePrediction = (bigCount >= 4) ? "Big" : "Small";
   let finalPrediction = aiBasePrediction;
 
-  if (consecutiveLosses === 1) { finalPrediction = aiBasePrediction; }
-  else if (consecutiveLosses === 2) { finalPrediction = (aiBasePrediction === "Big") ? "Small" : "Big"; }
-  else if (consecutiveLosses === 3 || consecutiveLosses === 4) {
+  if (consecutiveLosses === 1) {
+    finalPrediction = aiBasePrediction;
+  } else if (consecutiveLosses === 2) {
+    finalPrediction = (aiBasePrediction === "Big") ? "Small" : "Big";
+  } else if (consecutiveLosses === 3 || consecutiveLosses === 4) {
     let first3Losses = fullLossesHistory.slice(consecutiveLosses - 3, consecutiveLosses);
-    if(consecutiveLosses === 4) { first3Losses = fullLossesHistory.slice(1, 4); }
+    if (consecutiveLosses === 4) { first3Losses = fullLossesHistory.slice(1, 4); }
     let bigsIn3 = first3Losses.filter(b => b === "Big").length;
     let smallsIn3 = first3Losses.filter(b => b === "Small").length;
     finalPrediction = (bigsIn3 >= smallsIn3) ? "Big" : "Small";
-  }
-  else if (consecutiveLosses === 5) {
-    let original3Losses = fullLossesHistory.slice(2, 5); 
+  } else if (consecutiveLosses === 5) {
+    let original3Losses = fullLossesHistory.slice(2, 5);
     let bigsIn3 = original3Losses.filter(b => b === "Big").length;
     let smallsIn3 = original3Losses.filter(b => b === "Small").length;
     let majorityValue = (bigsIn3 >= smallsIn3) ? "Big" : "Small";
     finalPrediction = (majorityValue === "Big") ? "Small" : "Big";
+  } else {
+    finalPrediction = aiBasePrediction;
   }
-  else { finalPrediction = aiBasePrediction; }
-  
+
   return finalPrediction;
 }
 
-async function fetchNextLiveBlock() {
-  const maxHistory = parseInt(document.getElementById("count").value);
-  localStorage.setItem("savedMaxCount", maxHistory);
-  
-  try {
-    const res = await fetch("https://api.trongrid.io/wallet/getblockbynum?nocache=" + Date.now(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ num: currentTrackingBlock }) });
-    const data = await res.json();
-    if (data.blockID) {
-      const analysis = analyzeHashData(data.blockID);
-      trackedResults.push({ blockNum: currentTrackingBlock, blockHash: data.blockID, appResult: analysis.result, colorClass: analysis.colorClass, digit: analysis.digit, betPrediction: "Waiting" });
-      if (trackedResults.length > maxHistory) trackedResults.shift();
-      
-      recalculateAllPredictions();
-      localStorage.setItem("savedTrackedResults", JSON.stringify(trackedResults));
-      updateTrendBoard(); 
-      updateTableDisplay();
-      
-      const predBox = document.getElementById("nextBlockPrediction");
-      predBox.className = "pred-badge";
-      predBox.style.background = "linear-gradient(135deg, #3b82f6, #1d4ed8)";
-      predBox.innerText = (nextCalculatedBet === "Big") ? "BIG (အကြီး) (B)" : "SMALL (အသေး) (S)";
-      
-      currentTrackingBlock += 20; 
-      document.getElementById("startBlock").value = currentTrackingBlock;
-      localStorage.setItem("savedTargetBlock", currentTrackingBlock);
+function recalculateAllPredictions() {
+  for (let i = 0; i < trackedResults.length; i++) {
+    if (i === 0) {
+      trackedResults[i].betPrediction = "Waiting";
+    } else {
+      const history = trackedResults.slice(0, i);
+      trackedResults[i].betPrediction = getPredictionFromHistory(history);
     }
-  } catch (e) { console.error(e); }
+  }
+  nextCalculatedBet = getPredictionFromHistory(trackedResults);
+  saveData();
+}
+
+// ===== UPDATE DISPLAY FUNCTIONS =====
+function updatePredictionDisplay() {
+  const predBox = document.getElementById("nextBlockPrediction");
+  const detailEl = document.getElementById("predictionDetail");
+  
+  if (nextCalculatedBet === "Waiting" || trackedResults.length < 7) {
+    predBox.className = "pred-badge none";
+    predBox.innerText = "⏳ စောင့်ဆိုင်းဆဲ...";
+    detailEl.innerText = `ဒေတာ ${trackedResults.length}/7 ရှိပါသည်`;
+  } else {
+    predBox.className = "pred-badge";
+    if (nextCalculatedBet === "Big") {
+      predBox.style.background = "linear-gradient(135deg, #ef4444, #dc2626)";
+      predBox.innerText = "🔴 BIG (အကြီး)";
+      detailEl.innerText = "အကြီး ထွက်ရန် ခန့်မှန်းထားသည်";
+    } else {
+      predBox.style.background = "linear-gradient(135deg, #22c55e, #16a34a)";
+      predBox.innerText = "🟢 SMALL (အသေး)";
+      detailEl.innerText = "အသေး ထွက်ရန် ခန့်မှန်းထားသည်";
+    }
+  }
 }
 
 function updateTrendBoard() {
@@ -256,71 +299,228 @@ function updateTrendBoard() {
   let grid = Array(rows).fill(null).map(() => Array(cols).fill(""));
   let currentB = 0, currentS = 0, colIndex = 0, rowIndex = 0, lastResultText = null;
   const valid = trackedResults.filter(r => r.appResult === "Big" || r.appResult === "Small");
-  
-  valid.forEach(item => {
-    if (item.appResult === "Big") currentB++; else currentS++;
-    if (lastResultText === null) { grid[rowIndex][colIndex] = item; } 
-    else if (item.appResult === lastResultText) {
-      if (rowIndex + 1 < rows && grid[rowIndex + 1][colIndex] === "" && (rowIndex === 0 || grid[rowIndex][colIndex + 1] === "")) { rowIndex++; } else { colIndex++; }
+
+  valid.forEach((item, idx) => {
+    if (item.appResult === "Big") currentB++;
+    else if (item.appResult === "Small") currentS++;
+
+    if (lastResultText === null) {
+      grid[rowIndex][colIndex] = item;
+    } else if (item.appResult === lastResultText) {
+      if (rowIndex + 1 < rows && grid[rowIndex + 1][colIndex] === "" && (rowIndex === 0 || grid[rowIndex][colIndex + 1] === "")) {
+        rowIndex++;
+      } else {
+        colIndex++;
+        rowIndex = 0;
+      }
       if (colIndex < cols) grid[rowIndex][colIndex] = item;
-    } 
-    else {
-      rowIndex = 0; let nextCol = 0;
+    } else {
+      rowIndex = 0;
+      let nextCol = 0;
       while (nextCol < cols && grid[0][nextCol] !== "") { nextCol++; }
       colIndex = nextCol;
       if (colIndex < cols) grid[rowIndex][colIndex] = item;
     }
     lastResultText = item.appResult;
   });
-  
+
   let displayCols = 24, startCol = 0;
   if (colIndex >= displayCols) { startCol = colIndex - (displayCols - 1); }
   document.getElementById("countBig").innerText = currentB;
   document.getElementById("countSmall").innerText = currentS;
-  
+
   let html = "";
   for (let r = 0; r < rows; r++) {
     html += "<tr>";
     for (let c = startCol; c < startCol + displayCols; c++) {
       let cell = (c < cols) ? grid[r][c] : "";
-      html += `<td>${cell ? `<div class="circle ${cell.colorClass}">${cell.appResult[0]}</div>` : ""}</td>`;
+      let displayText = "";
+      if (cell) {
+        if (cell.appResult === "Big") displayText = "B";
+        else if (cell.appResult === "Small") displayText = "S";
+        else displayText = "?";
+        html += `<td><div class="circle ${cell.colorClass}">${displayText}</div></td>`;
+      } else {
+        html += `<td></td>`;
+      }
     }
     html += "</tr>";
   }
   document.getElementById("roadMapTable").innerHTML = html;
+  saveData();
 }
 
 function updateTableDisplay() {
+  if (trackedResults.length === 0) {
+    document.getElementById("output").innerHTML = "<p style='color:#94a3b8; text-align:center;'>ဒေတာမရှိသေးပါ</p>";
+    return;
+  }
+  
   let table = `<table><thead><tr><th>Block</th><th>Bet</th><th>Result</th></tr></thead><tbody>`;
-  for (let i = trackedResults.length - 1; i >= 0; i--) {
+  const displayCount = Math.min(trackedResults.length, 50);
+  for (let i = trackedResults.length - 1; i >= trackedResults.length - displayCount; i--) {
     let row = trackedResults[i];
+    if (!row) continue;
     let win = (row.betPrediction === "Big" && row.digit >= 5) || (row.betPrediction === "Small" && row.digit <= 4);
     let cls = (row.betPrediction === "Waiting") ? "" : (win ? "win-match" : "win-miss");
-    table += `<tr><td>${row.blockNum}</td><td>${row.betPrediction}</td><td><span class="big-digit-display ${cls}">${row.digit}</span></td></tr>`;
+    let betDisplay = row.betPrediction || "-";
+    let digitDisplay = row.digit !== undefined && row.digit !== "-" ? row.digit : "-";
+    table += `<tr><td>${row.blockNum}</td><td>${betDisplay}</td><td><span class="big-digit-display ${cls}">${digitDisplay}</span></td></tr>`;
   }
   document.getElementById("output").innerHTML = table + "</tbody></table>";
 }
 
-// 🎯 ခလုတ်နှိပ်မှုများ ချက်ချင်း အလုပ်လုပ်ပြီး Status ပြောင်းလဲစေမည့် စနစ်သစ်
-function startLiveTracking() { 
-  currentTrackingBlock = parseInt(document.getElementById("startBlock").value); 
-  localStorage.setItem("savedTargetBlock", currentTrackingBlock); 
-  if(!liveIntervalId) { liveIntervalId = setInterval(fetchNextLiveBlock, 2000); }
+// ===== FETCH BLOCK DATA =====
+async function fetchNextLiveBlock() {
+  const maxHistory = parseInt(document.getElementById("count").value) || 300;
+  saveData();
+
+  try {
+    const response = await fetch("https://api.trongrid.io/wallet/getblockbynum", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ num: currentTrackingBlock })
+    });
+    
+    if (!response.ok) throw new Error("Network response was not ok");
+    const data = await response.json();
+    
+    if (data.blockID) {
+      const analysis = analyzeHashData(data.blockID);
+      
+      trackedResults.push({
+        blockNum: currentTrackingBlock,
+        blockHash: data.blockID,
+        appResult: analysis.result,
+        colorClass: analysis.colorClass,
+        digit: analysis.digit,
+        betPrediction: "Waiting"
+      });
+
+      if (trackedResults.length > maxHistory) {
+        trackedResults.shift();
+      }
+
+      recalculateAllPredictions();
+      updateTrendBoard();
+      updateTableDisplay();
+      updatePredictionDisplay();
+
+      document.getElementById("currentBlockDisplay").innerText = `Block: ${currentTrackingBlock}`;
+      
+      currentTrackingBlock += 20;
+      document.getElementById("startBlock").value = currentTrackingBlock;
+      saveData();
+    } else {
+      console.log("No blockID in response");
+    }
+  } catch (error) {
+    console.error("Fetch error:", error);
+    // Try alternative API endpoint if main fails
+    try {
+      const altResponse = await fetch("https://api.trongrid.io/wallet/getblockbynum?nocache=" + Date.now(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ num: currentTrackingBlock })
+      });
+      if (altResponse.ok) {
+        const altData = await altResponse.json();
+        if (altData.blockID) {
+          const analysis = analyzeHashData(altData.blockID);
+          trackedResults.push({
+            blockNum: currentTrackingBlock,
+            blockHash: altData.blockID,
+            appResult: analysis.result,
+            colorClass: analysis.colorClass,
+            digit: analysis.digit,
+            betPrediction: "Waiting"
+          });
+          if (trackedResults.length > maxHistory) trackedResults.shift();
+          recalculateAllPredictions();
+          updateTrendBoard();
+          updateTableDisplay();
+          updatePredictionDisplay();
+          currentTrackingBlock += 20;
+          document.getElementById("startBlock").value = currentTrackingBlock;
+          saveData();
+        }
+      }
+    } catch (altError) {
+      console.log("Alternative fetch also failed:", altError);
+    }
+  }
+}
+
+// ===== CONTROL FUNCTIONS =====
+function startLiveTracking() {
+  if (isRunning) {
+    console.log("Already running");
+    return;
+  }
+  
+  currentTrackingBlock = parseInt(document.getElementById("startBlock").value) || 84420346;
+  isRunning = true;
+  
+  // Load existing data first
+  loadData();
+  
+  if (!liveIntervalId) {
+    liveIntervalId = setInterval(fetchNextLiveBlock, 2000);
+    // Fetch immediately
+    fetchNextLiveBlock();
+  }
+  
   const statusEl = document.getElementById("liveStatus");
   statusEl.className = "status-running";
   statusEl.innerText = "Status: Running";
+  
+  document.getElementById("btnStart").style.background = "#15803d";
+  document.getElementById("btnStart").innerText = "⏳ Running...";
+  
+  saveData();
 }
 
-function stopLiveTracking() { 
-  clearInterval(liveIntervalId); liveIntervalId = null; 
+function stopLiveTracking() {
+  isRunning = false;
+  clearInterval(liveIntervalId);
+  liveIntervalId = null;
+  
   const statusEl = document.getElementById("liveStatus");
   statusEl.className = "status-suspended";
   statusEl.innerText = "Status: Suspended";
+  
+  document.getElementById("btnStart").style.background = "#22c55e";
+  document.getElementById("btnStart").innerText = "▶️ Start Stream";
+  
+  saveData();
 }
 
-function clearStoredData() { 
-  if(confirm("Clear cache?")) { localStorage.clear(); trackedResults = []; location.reload(); } 
+function clearStoredData() {
+  if (confirm("Clear all cached data?")) {
+    localStorage.clear();
+    trackedResults = [];
+    nextCalculatedBet = "Waiting";
+    currentTrackingBlock = 84420346;
+    document.getElementById("startBlock").value = currentTrackingBlock;
+    document.getElementById("countBig").innerText = "0";
+    document.getElementById("countSmall").innerText = "0";
+    document.getElementById("roadMapTable").innerHTML = "";
+    document.getElementById("output").innerHTML = "<p style='color:#94a3b8; text-align:center;'>ဒေတာရှင်းလင်းပြီးပါပြီ</p>";
+    updatePredictionDisplay();
+    stopLiveTracking();
+    location.reload();
+  }
 }
+
+// ===== KEYBOARD SHORTCUTS =====
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.getElementById('accessKeyInput') === document.activeElement) {
+    verifyKey();
+  }
+});
+
+console.log("✅ Premium Lottery Analysis Tool v47 Loaded Successfully");
+console.log(`📊 Tracked Results: ${trackedResults.length}`);
 </script>
 </body>
 </html>
