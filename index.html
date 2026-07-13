@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Lottery Analysis Tool v48</title>
+  <title>Premium Lottery Analysis Tool v49</title>
   <style>
     :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f8fafc; --accent-red: #ef4444; --accent-blue: #3b82f6; --border-color: #334155; }
     body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px; max-width: 1200px; margin: 0 auto; }
@@ -25,27 +25,31 @@
     .road-map-table { border-collapse: collapse; margin: 0 auto; }
     .road-map-table td { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border-color); text-align: center; vertical-align: middle; }
     .circle { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; color: white; }
-    /* B = အနီရောင်, S = အစိမ်းရောင် */
-    .circle.color-big { background: linear-gradient(135deg, #ef4444, #dc2626); }  /* အနီ */
-    .circle.color-small { background: linear-gradient(135deg, #22c55e, #16a34a); }  /* အစိမ်း */
+    .circle.color-big { background: linear-gradient(135deg, #ef4444, #dc2626); }
+    .circle.color-small { background: linear-gradient(135deg, #22c55e, #16a34a); }
     .circle.color-purple { background: linear-gradient(135deg, #c084fc, #a855f7); }
     .circle.color-skip { background: #475569; }
-    .stats-counter { display: flex; gap: 20px; margin-top: 15px; font-weight: bold; background: #0f172a; padding: 10px 15px; border-radius: 8px; }
-    .stat-b { color: #ef4444; }  /* အနီ */
-    .stat-s { color: #22c55e; }  /* အစိမ်း */
+    .stats-counter { display: flex; gap: 20px; margin-top: 15px; font-weight: bold; background: #0f172a; padding: 10px 15px; border-radius: 8px; flex-wrap: wrap; }
+    .stat-b { color: #ef4444; }
+    .stat-s { color: #22c55e; }
+    .stat-last { color: #60a5fa; font-size: 14px; }
     .prediction-panel { background: #0f172a; border-radius: 12px; padding: 25px 15px; margin-top: 15px; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 10px; }
     .pred-badge { font-size: 24px; font-weight: bold; padding: 14px 40px; border-radius: 16px; color: white; min-width: 260px; text-align: center; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
     .pred-badge.none { background: #334155; }
     .big-digit-display { font-size: 22px; font-weight: 700; display: block; }
-    .win-match { color: #22c55e; }  /* အစိမ်း */
-    .win-miss { color: #ef4444; }   /* အနီ */
+    .win-match { color: #22c55e; }
+    .win-miss { color: #ef4444; }
     .iframe-container { width: 100%; height: 750px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #000; }
     .iframe-container iframe { width: 100%; height: 100%; border: 0; display: block; }
     #liveStatus { font-weight: bold; padding: 6px 12px; border-radius: 6px; display: inline-block; margin-top: 8px; }
     .status-suspended { background: #334155; color: #94a3b8; }
     .status-running { background: #15803d; color: #22c55e; animation: pulse 2s infinite; }
+    .status-error { background: #7f1d1d; color: #f87171; animation: pulse 1s infinite; }
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
     .block-display { font-size: 14px; color: #94a3b8; margin-top: 5px; }
+    .status-detail { font-size: 12px; color: #64748b; margin-left: 10px; }
+    .last-update { font-size: 13px; color: #94a3b8; margin-top: 5px; }
+    .refresh-btn { background: #3b82f6; padding: 8px 16px; border-radius: 6px; border: none; color: white; cursor: pointer; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -78,11 +82,13 @@
         <button id="btnStart" onclick="startLiveTracking()" style="background: #22c55e;">▶️ Start Stream</button>
         <button id="btnStop" onclick="stopLiveTracking()" style="background: var(--accent-red);">⏸️ Terminate</button>
         <button id="btnClear" onclick="clearStoredData()" style="background: #475569;">🗑️ Clear Cache</button>
+        <button onclick="forceRefresh()" style="background: #3b82f6;">🔄 Refresh</button>
       </div>
 
       <div>
         <span id="liveStatus" class="status-suspended">Status: Suspended</span>
         <span id="currentBlockDisplay" class="block-display">Block: --</span>
+        <span id="lastUpdateTime" class="last-update">Last update: --</span>
       </div>
 
       <div class="prediction-panel">
@@ -94,6 +100,8 @@
       <div class="stats-counter">
         <div>Total Big (B): <span id="countBig" class="stat-b">0</span></div>
         <div>Total Small (S): <span id="countSmall" class="stat-s">0</span></div>
+        <div class="stat-last">Last: <span id="lastResult">--</span></div>
+        <div class="stat-last">Total: <span id="totalCount">0</span></div>
       </div>
       
       <div class="road-map-wrapper">
@@ -123,6 +131,9 @@ let currentTrackingBlock = 84420346;
 let trackedResults = [];
 let nextCalculatedBet = "Waiting";
 let isRunning = false;
+let fetchAttempts = 0;
+let lastFetchTime = null;
+let errorCount = 0;
 
 // ===== DATA STORAGE FUNCTIONS =====
 function saveData() {
@@ -131,6 +142,7 @@ function saveData() {
     localStorage.setItem("savedMaxCount", document.getElementById("count").value);
     localStorage.setItem("savedTrackedResults", JSON.stringify(trackedResults));
     localStorage.setItem("savedPrediction", nextCalculatedBet);
+    localStorage.setItem("savedLastBlock", currentTrackingBlock);
   } catch(e) { console.log("Save error:", e); }
 }
 
@@ -151,6 +163,7 @@ function loadData() {
         updateTrendBoard();
         updateTableDisplay();
         updatePredictionDisplay();
+        updateStats();
       }
     }
     
@@ -158,6 +171,12 @@ function loadData() {
     if (storedPred) {
       nextCalculatedBet = storedPred;
       updatePredictionDisplay();
+    }
+    
+    const storedLastBlock = localStorage.getItem("savedLastBlock");
+    if (storedLastBlock) {
+      currentTrackingBlock = parseInt(storedLastBlock);
+      document.getElementById("startBlock").value = currentTrackingBlock;
     }
   } catch(e) { console.log("Load error:", e); }
 }
@@ -202,7 +221,6 @@ function analyzeHashData(blockHash) {
   }
   if (targetDigit === null) return { result: "Skip", colorClass: "color-skip", digit: "-" };
   const resText = (targetDigit >= 5) ? "Big" : "Small";
-  // B = အနီ (color-big), S = အစိမ်း (color-small)
   let color = (resText === "Big") ? "color-big" : "color-small";
   return { result: resText, colorClass: color, digit: targetDigit };
 }
@@ -294,6 +312,22 @@ function updatePredictionDisplay() {
   }
 }
 
+function updateStats() {
+  let bigCount = 0, smallCount = 0;
+  trackedResults.forEach(r => {
+    if (r.appResult === "Big") bigCount++;
+    else if (r.appResult === "Small") smallCount++;
+  });
+  document.getElementById("countBig").innerText = bigCount;
+  document.getElementById("countSmall").innerText = smallCount;
+  document.getElementById("totalCount").innerText = trackedResults.length;
+  
+  if (trackedResults.length > 0) {
+    const last = trackedResults[trackedResults.length - 1];
+    document.getElementById("lastResult").innerText = last.appResult === "Big" ? "B" : "S";
+  }
+}
+
 function updateTrendBoard() {
   const rows = 6, cols = 50;
   let grid = Array(rows).fill(null).map(() => Array(cols).fill(""));
@@ -326,8 +360,7 @@ function updateTrendBoard() {
 
   let displayCols = 24, startCol = 0;
   if (colIndex >= displayCols) { startCol = colIndex - (displayCols - 1); }
-  document.getElementById("countBig").innerText = currentB;
-  document.getElementById("countSmall").innerText = currentS;
+  updateStats();
 
   let html = "";
   for (let r = 0; r < rows; r++) {
@@ -338,11 +371,9 @@ function updateTrendBoard() {
       if (cell) {
         if (cell.appResult === "Big") {
           displayText = "B";
-          // B = အနီ (color-big)
           html += `<td><div class="circle color-big">${displayText}</div></td>`;
         } else if (cell.appResult === "Small") {
           displayText = "S";
-          // S = အစိမ်း (color-small)
           html += `<td><div class="circle color-small">${displayText}</div></td>`;
         } else {
           html += `<td></td>`;
@@ -377,83 +408,125 @@ function updateTableDisplay() {
   document.getElementById("output").innerHTML = table + "</tbody></table>";
 }
 
-// ===== FETCH BLOCK DATA =====
+// ===== FETCH BLOCK DATA WITH RETRY =====
 async function fetchNextLiveBlock() {
   const maxHistory = parseInt(document.getElementById("count").value) || 300;
-  saveData();
-
+  const currentBlock = currentTrackingBlock;
+  
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
     const response = await fetch("https://api.trongrid.io/wallet/getblockbynum", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ num: currentTrackingBlock })
+      body: JSON.stringify({ num: currentBlock }),
+      signal: controller.signal
     });
     
-    if (!response.ok) throw new Error("Network response was not ok");
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     
     if (data.blockID) {
       const analysis = analyzeHashData(data.blockID);
       
-      trackedResults.push({
-        blockNum: currentTrackingBlock,
-        blockHash: data.blockID,
-        appResult: analysis.result,
-        colorClass: analysis.colorClass,
-        digit: analysis.digit,
-        betPrediction: "Waiting"
-      });
+      // Check if this block already exists
+      const exists = trackedResults.some(r => r.blockNum === currentBlock);
+      if (!exists) {
+        trackedResults.push({
+          blockNum: currentBlock,
+          blockHash: data.blockID,
+          appResult: analysis.result,
+          colorClass: analysis.colorClass,
+          digit: analysis.digit,
+          betPrediction: "Waiting"
+        });
 
-      if (trackedResults.length > maxHistory) {
-        trackedResults.shift();
+        if (trackedResults.length > maxHistory) {
+          trackedResults.shift();
+        }
+
+        recalculateAllPredictions();
+        updateTrendBoard();
+        updateTableDisplay();
+        updatePredictionDisplay();
+        updateStats();
+
+        document.getElementById("currentBlockDisplay").innerText = `Block: ${currentBlock}`;
+        document.getElementById("lastUpdateTime").innerText = `Last update: ${new Date().toLocaleTimeString()}`;
+        
+        currentTrackingBlock += 20;
+        document.getElementById("startBlock").value = currentTrackingBlock;
+        saveData();
+        errorCount = 0;
+        fetchAttempts = 0;
+        
+        const statusEl = document.getElementById("liveStatus");
+        statusEl.className = "status-running";
+        statusEl.innerText = "Status: Running";
+      } else {
+        // Block already exists, skip and increment
+        currentTrackingBlock += 20;
+        document.getElementById("startBlock").value = currentTrackingBlock;
+        saveData();
       }
-
-      recalculateAllPredictions();
-      updateTrendBoard();
-      updateTableDisplay();
-      updatePredictionDisplay();
-
-      document.getElementById("currentBlockDisplay").innerText = `Block: ${currentTrackingBlock}`;
-      
-      currentTrackingBlock += 20;
-      document.getElementById("startBlock").value = currentTrackingBlock;
-      saveData();
     } else {
-      console.log("No blockID in response");
+      throw new Error("No blockID in response");
     }
   } catch (error) {
     console.error("Fetch error:", error);
-    // Try alternative API endpoint if main fails
-    try {
-      const altResponse = await fetch("https://api.trongrid.io/wallet/getblockbynum?nocache=" + Date.now(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ num: currentTrackingBlock })
-      });
-      if (altResponse.ok) {
-        const altData = await altResponse.json();
-        if (altData.blockID) {
-          const analysis = analyzeHashData(altData.blockID);
-          trackedResults.push({
-            blockNum: currentTrackingBlock,
-            blockHash: altData.blockID,
-            appResult: analysis.result,
-            colorClass: analysis.colorClass,
-            digit: analysis.digit,
-            betPrediction: "Waiting"
-          });
-          if (trackedResults.length > maxHistory) trackedResults.shift();
-          recalculateAllPredictions();
-          updateTrendBoard();
-          updateTableDisplay();
-          updatePredictionDisplay();
-          currentTrackingBlock += 20;
-          document.getElementById("startBlock").value = currentTrackingBlock;
-          saveData();
+    errorCount++;
+    fetchAttempts++;
+    
+    if (errorCount >= 3) {
+      const statusEl = document.getElementById("liveStatus");
+      statusEl.className = "status-error";
+      statusEl.innerText = "⚠️ Connection Error - Retrying...";
+    }
+    
+    // Try alternative API with retry
+    if (fetchAttempts < 5) {
+      try {
+        const altResponse = await fetch("https://api.trongrid.io/wallet/getblockbynum?nocache=" + Date.now(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ num: currentBlock })
+        });
+        if (altResponse.ok) {
+          const altData = await altResponse.json();
+          if (altData.blockID) {
+            const analysis = analyzeHashData(altData.blockID);
+            const exists = trackedResults.some(r => r.blockNum === currentBlock);
+            if (!exists) {
+              trackedResults.push({
+                blockNum: currentBlock,
+                blockHash: altData.blockID,
+                appResult: analysis.result,
+                colorClass: analysis.colorClass,
+                digit: analysis.digit,
+                betPrediction: "Waiting"
+              });
+              if (trackedResults.length > maxHistory) trackedResults.shift();
+              recalculateAllPredictions();
+              updateTrendBoard();
+              updateTableDisplay();
+              updatePredictionDisplay();
+              updateStats();
+              currentTrackingBlock += 20;
+              document.getElementById("startBlock").value = currentTrackingBlock;
+              document.getElementById("currentBlockDisplay").innerText = `Block: ${currentBlock}`;
+              document.getElementById("lastUpdateTime").innerText = `Last update: ${new Date().toLocaleTimeString()}`;
+              saveData();
+              errorCount = 0;
+              fetchAttempts = 0;
+            }
+          }
         }
+      } catch (altError) {
+        console.log("Alternative fetch failed:", altError);
       }
-    } catch (altError) {
-      console.log("Alternative fetch also failed:", altError);
     }
   }
 }
@@ -467,12 +540,14 @@ function startLiveTracking() {
   
   currentTrackingBlock = parseInt(document.getElementById("startBlock").value) || 84420346;
   isRunning = true;
+  errorCount = 0;
+  fetchAttempts = 0;
   
   // Load existing data first
   loadData();
   
   if (!liveIntervalId) {
-    liveIntervalId = setInterval(fetchNextLiveBlock, 2000);
+    liveIntervalId = setInterval(fetchNextLiveBlock, 1500);
     // Fetch immediately
     fetchNextLiveBlock();
   }
@@ -491,6 +566,8 @@ function stopLiveTracking() {
   isRunning = false;
   clearInterval(liveIntervalId);
   liveIntervalId = null;
+  errorCount = 0;
+  fetchAttempts = 0;
   
   const statusEl = document.getElementById("liveStatus");
   statusEl.className = "status-suspended";
@@ -502,6 +579,17 @@ function stopLiveTracking() {
   saveData();
 }
 
+function forceRefresh() {
+  if (isRunning) {
+    // Force fetch immediately
+    fetchNextLiveBlock();
+    document.getElementById("lastUpdateTime").innerText = `Manual refresh: ${new Date().toLocaleTimeString()}`;
+  } else {
+    // Start if not running
+    startLiveTracking();
+  }
+}
+
 function clearStoredData() {
   if (confirm("Clear all cached data?")) {
     localStorage.clear();
@@ -511,6 +599,8 @@ function clearStoredData() {
     document.getElementById("startBlock").value = currentTrackingBlock;
     document.getElementById("countBig").innerText = "0";
     document.getElementById("countSmall").innerText = "0";
+    document.getElementById("totalCount").innerText = "0";
+    document.getElementById("lastResult").innerText = "--";
     document.getElementById("roadMapTable").innerHTML = "";
     document.getElementById("output").innerHTML = "<p style='color:#94a3b8; text-align:center;'>ဒေတာရှင်းလင်းပြီးပါပြီ</p>";
     updatePredictionDisplay();
@@ -524,11 +614,29 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && document.getElementById('accessKeyInput') === document.activeElement) {
     verifyKey();
   }
+  if (e.key === 'r' || e.key === 'R') {
+    if (!e.ctrlKey && !e.metaKey) {
+      forceRefresh();
+    }
+  }
 });
 
-console.log("✅ Premium Lottery Analysis Tool v48 Loaded Successfully");
+// Auto-restart if disconnected
+setInterval(() => {
+  if (isRunning && trackedResults.length > 0) {
+    const lastUpdate = document.getElementById("lastUpdateTime").innerText;
+    if (lastUpdate.includes("--") || lastUpdate.includes("ဒေတာ")) {
+      // Try to refresh
+      fetchNextLiveBlock();
+    }
+  }
+}, 30000);
+
+console.log("✅ Premium Lottery Analysis Tool v49 Loaded Successfully");
 console.log("📊 B = အနီရောင်, S = အစိမ်းရောင်");
+console.log("🔄 Auto-refresh every 1.5 seconds");
 console.log(`📈 Tracked Results: ${trackedResults.length}`);
+console.log("⌨️ Press 'R' key to force refresh");
 </script>
 </body>
 </html>
