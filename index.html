@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Lottery Analysis Tool v52</title>
+  <title>Premium Lottery Analysis Tool v53</title>
   <style>
     :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f8fafc; --accent-red: #ef4444; --accent-blue: #3b82f6; --border-color: #334155; }
     body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px; max-width: 1200px; margin: 0 auto; }
@@ -59,6 +59,7 @@
     .waiting-message { color: #fbbf24; font-size: 16px; padding: 10px; text-align: center; }
     .loading-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
     @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
+    .retry-count { color: #94a3b8; font-size: 13px; margin-top: 5px; }
   </style>
 </head>
 <body>
@@ -108,7 +109,8 @@
         <div id="nextBlockPrediction" class="pred-badge none">⏳ စောင့်ဆိုင်းဆဲ...</div>
         <div style="font-size:14px; color:#94a3b8;" id="predictionDetail">လုံလောက်သော ဒေတာမရှိသေးပါ</div>
         <div style="font-size:12px; color:#64748b;" id="blockInfo">Started from: -- | Current: --</div>
-        <div id="waitingMessage" class="waiting-message" style="display:none;">⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... <span class="loading-dots"></span></div>
+        <div id="waitingMessage" class="waiting-message" style="display:none;">⏳ Internet ပြန်လည်ချိတ်ဆက်နေပါသည်... <span class="loading-dots"></span></div>
+        <div id="retryCount" class="retry-count" style="display:none;">ပြန်လည်ကြိုးစားမှု: 0</div>
       </div>
 
       <h3 style="color:#60a5fa;">📊 Matrix Trend Map (Big Road)</h3>
@@ -150,7 +152,7 @@ let fetchAttempts = 0;
 let errorCount = 0;
 let userRequestedBlock = 84424346;
 let isWaitingForData = false;
-let waitingTimeout = null;
+let retryInterval = 7000; // 7 seconds retry interval
 
 // ===== DATA STORAGE FUNCTIONS =====
 function saveData() {
@@ -331,14 +333,17 @@ function updatePredictionDisplay() {
   const predBox = document.getElementById("nextBlockPrediction");
   const detailEl = document.getElementById("predictionDetail");
   const waitingMsg = document.getElementById("waitingMessage");
+  const retryEl = document.getElementById("retryCount");
   
   if (nextCalculatedBet === "Waiting" || trackedResults.length < 7) {
     predBox.className = "pred-badge waiting";
-    predBox.innerText = "⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ...";
+    predBox.innerText = "⏳ Internet ပြန်လည်ချိတ်ဆက်နေပါသည်...";
     detailEl.innerText = `ဒေတာ ${trackedResults.length}/7 ရှိပါသည်`;
     waitingMsg.style.display = "block";
+    retryEl.style.display = "block";
   } else {
     waitingMsg.style.display = "none";
+    retryEl.style.display = "none";
     predBox.className = "pred-badge";
     if (nextCalculatedBet === "Big") {
       predBox.style.background = "linear-gradient(135deg, #ef4444, #dc2626)";
@@ -452,11 +457,15 @@ function updateTableDisplay() {
 function showWaitingMessage() {
   const statusEl = document.getElementById("liveStatus");
   statusEl.className = "status-waiting";
-  statusEl.innerText = "⏳ Status: Waiting for data...";
+  statusEl.innerText = "⏳ Status: ပြန်လည်ချိတ်ဆက်နေပါသည်...";
   
   const waitingMsg = document.getElementById("waitingMessage");
   waitingMsg.style.display = "block";
-  waitingMsg.innerHTML = "⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... <span class='loading-dots'></span>";
+  waitingMsg.innerHTML = "⏳ Internet ပြန်လည်ချိတ်ဆက်နေပါသည်... <span class='loading-dots'></span>";
+  
+  const retryEl = document.getElementById("retryCount");
+  retryEl.style.display = "block";
+  retryEl.innerText = `ပြန်လည်ကြိုးစားမှု: ${fetchAttempts}`;
 }
 
 function hideWaitingMessage() {
@@ -467,9 +476,11 @@ function hideWaitingMessage() {
   }
   const waitingMsg = document.getElementById("waitingMessage");
   waitingMsg.style.display = "none";
+  const retryEl = document.getElementById("retryCount");
+  retryEl.style.display = "none";
 }
 
-// ===== FETCH BLOCK DATA =====
+// ===== FETCH BLOCK DATA WITH 7 SECOND RETRY =====
 async function fetchNextLiveBlock() {
   const maxHistory = parseInt(document.getElementById("count").value) || 300;
   const currentBlock = currentTrackingBlock;
@@ -541,7 +552,6 @@ async function fetchNextLiveBlock() {
         currentTrackingBlock += 20;
         document.getElementById("startBlock").value = currentTrackingBlock;
         saveData();
-        // Still hide waiting on success
         hideWaitingMessage();
       }
     } else {
@@ -552,13 +562,17 @@ async function fetchNextLiveBlock() {
     errorCount++;
     fetchAttempts++;
     
-    // Show waiting message with retry info
+    // Show waiting message with retry info - 7 seconds retry
     const waitingMsg = document.getElementById("waitingMessage");
     waitingMsg.style.display = "block";
-    waitingMsg.innerHTML = `⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... (အကြိမ် ${fetchAttempts}) <span class='loading-dots'></span>`;
+    waitingMsg.innerHTML = `⏳ Internet ပြန်လည်ချိတ်ဆက်နေပါသည်... (${fetchAttempts}) <span class='loading-dots'></span>`;
+    
+    const retryEl = document.getElementById("retryCount");
+    retryEl.style.display = "block";
+    retryEl.innerText = `ပြန်လည်ကြိုးစားမှု: ${fetchAttempts} (၇ စက္ကန့်တစ်ခါ)`;
     
     // Try alternative API with retry
-    if (fetchAttempts < 5) {
+    if (fetchAttempts < 10) {
       try {
         const altResponse = await fetch("https://api.trongrid.io/wallet/getblockbynum?nocache=" + Date.now(), {
           method: "POST",
@@ -601,15 +615,17 @@ async function fetchNextLiveBlock() {
         }
       } catch (altError) {
         console.log("Alternative fetch failed:", altError);
-        // Keep showing waiting message
-        waitingMsg.innerHTML = `⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... (ပြန်လည်ချိတ်ဆက်နေပါ) <span class='loading-dots'></span>`;
+        // Keep showing waiting message with 7 second retry
+        waitingMsg.innerHTML = `⏳ Internet ပြန်လည်ချိတ်ဆက်နေပါသည်... (${fetchAttempts}) <span class='loading-dots'></span>`;
+        retryEl.innerText = `ပြန်လည်ကြိုးစားမှု: ${fetchAttempts} (၇ စက္ကန့်တစ်ခါ)`;
       }
     } else {
-      // Too many attempts, show error but keep waiting message
-      waitingMsg.innerHTML = `⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... (ချိတ်ဆက်မှုပြတ်တောက်နေပါ) <span class='loading-dots'></span>`;
+      // Too many attempts, keep waiting message
+      waitingMsg.innerHTML = `⏳ Internet ပြန်လည်ချိတ်ဆက်နေပါသည်... (ဆက်လက်စောင့်ဆိုင်းနေပါ) <span class='loading-dots'></span>`;
+      retryEl.innerText = `ပြန်လည်ကြိုးစားမှု: ${fetchAttempts} (ဆက်လက်စောင့်ဆိုင်းနေပါ)`;
       const statusEl = document.getElementById("liveStatus");
       statusEl.className = "status-waiting";
-      statusEl.innerText = "⏳ Status: ပြန်လည်ချိတ်ဆက်နေပါ...";
+      statusEl.innerText = "⏳ Status: ပြန်လည်ချိတ်ဆက်နေပါသည်...";
     }
   }
 }
@@ -658,13 +674,14 @@ function startLiveTracking() {
   saveData();
   
   if (!liveIntervalId) {
-    liveIntervalId = setInterval(fetchNextLiveBlock, 1500);
+    // Set interval to 7 seconds as requested
+    liveIntervalId = setInterval(fetchNextLiveBlock, retryInterval);
     fetchNextLiveBlock();
   }
   
   const statusEl = document.getElementById("liveStatus");
   statusEl.className = "status-waiting";
-  statusEl.innerText = "⏳ Status: စောင့်ဆိုင်းနေပါ...";
+  statusEl.innerText = "⏳ Status: ပြန်လည်ချိတ်ဆက်နေပါသည်...";
   
   document.getElementById("btnStart").style.background = "#15803d";
   document.getElementById("btnStart").innerText = "⏳ Running...";
@@ -683,6 +700,8 @@ function stopLiveTracking() {
   
   const waitingMsg = document.getElementById("waitingMessage");
   waitingMsg.style.display = "none";
+  const retryEl = document.getElementById("retryCount");
+  retryEl.style.display = "none";
   
   document.getElementById("btnStart").style.background = "#22c55e";
   document.getElementById("btnStart").innerText = "▶️ Start Stream";
@@ -725,6 +744,7 @@ function clearStoredData() {
     document.getElementById("currentBlockDisplay").innerText = `Block: ${startBlock}`;
     document.getElementById("warningBox").classList.remove("show");
     document.getElementById("waitingMessage").style.display = "none";
+    document.getElementById("retryCount").style.display = "none";
     updatePredictionDisplay();
     stopLiveTracking();
     
@@ -745,23 +765,13 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-// Auto-restart if disconnected
-setInterval(() => {
-  if (isRunning && trackedResults.length > 0) {
-    const lastUpdate = document.getElementById("lastUpdateTime").innerText;
-    if (lastUpdate.includes("--") || lastUpdate.includes("ဒေတာ")) {
-      fetchNextLiveBlock();
-    }
-  }
-}, 30000);
-
-console.log("✅ Premium Lottery Analysis Tool v52 Loaded Successfully");
+console.log("✅ Premium Lottery Analysis Tool v53 Loaded Successfully");
 console.log("📊 B = အနီရောင်, S = အစိမ်းရောင်");
-console.log("🔄 Auto-refresh every 1.5 seconds");
+console.log(`🔄 Auto-retry every ${retryInterval/1000} seconds`);
 console.log(`📈 Tracked Results: ${trackedResults.length}`);
 console.log("⌨️ Press 'R' key to force refresh");
 console.log("📦 Starting from block:", currentTrackingBlock);
-console.log("💡 Showing 'Live Result ကိုစောင့်ဆိုင်းနေပါ...' while waiting");
+console.log("💡 Showing 'Internet ပြန်လည်ချိတ်ဆက်နေပါသည်...' while waiting");
 </script>
 </body>
 </html>
