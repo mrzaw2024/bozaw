@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Lottery Analysis Tool v51</title>
+  <title>Premium Lottery Analysis Tool v52</title>
   <style>
     :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f8fafc; --accent-red: #ef4444; --accent-blue: #3b82f6; --border-color: #334155; }
     body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px; max-width: 1200px; margin: 0 auto; }
@@ -36,6 +36,8 @@
     .prediction-panel { background: #0f172a; border-radius: 12px; padding: 25px 15px; margin-top: 15px; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 10px; }
     .pred-badge { font-size: 24px; font-weight: bold; padding: 14px 40px; border-radius: 16px; color: white; min-width: 260px; text-align: center; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
     .pred-badge.none { background: #334155; }
+    .pred-badge.waiting { background: linear-gradient(135deg, #f59e0b, #d97706); animation: pulse-wait 1.5s infinite; }
+    @keyframes pulse-wait { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     .big-digit-display { font-size: 22px; font-weight: 700; display: block; }
     .win-match { color: #22c55e; }
     .win-miss { color: #ef4444; }
@@ -44,6 +46,7 @@
     #liveStatus { font-weight: bold; padding: 6px 12px; border-radius: 6px; display: inline-block; margin-top: 8px; }
     .status-suspended { background: #334155; color: #94a3b8; }
     .status-running { background: #15803d; color: #22c55e; animation: pulse 2s infinite; }
+    .status-waiting { background: #92400e; color: #fbbf24; animation: pulse 1.5s infinite; }
     .status-error { background: #7f1d1d; color: #f87171; animation: pulse 1s infinite; }
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
     .block-display { font-size: 14px; color: #94a3b8; margin-top: 5px; }
@@ -53,6 +56,9 @@
     .input-hint { font-size: 12px; color: #64748b; margin-top: 4px; }
     .warning-box { background: #7f1d1d; padding: 10px 15px; border-radius: 8px; margin-top: 10px; color: #f87171; display: none; }
     .warning-box.show { display: block; }
+    .waiting-message { color: #fbbf24; font-size: 16px; padding: 10px; text-align: center; }
+    .loading-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
   </style>
 </head>
 <body>
@@ -79,8 +85,8 @@
       <div id="warningBox" class="warning-box">⚠️ Warning: Using cached data. Click Clear Cache to start fresh.</div>
       
       <label>📦 Target Block Sequence:</label>
-      <input type="number" id="startBlock" value="84423206" placeholder="Enter block number e.g. 84423206">
-      <div class="input-hint">💡 Enter the block number you want to start from (e.g., 84423206)</div>
+      <input type="number" id="startBlock" value="84424346" placeholder="Enter block number e.g. 84424346">
+      <div class="input-hint">💡 Enter the block number you want to start from (e.g., 84424346)</div>
       
       <label>🔢 Max Stream Frame Count:</label>
       <input type="number" id="count" value="300">
@@ -93,7 +99,7 @@
       </div>
 
       <div>
-        <span id="liveStatus" class="status-suspended">Status: Suspended</span>
+        <span id="liveStatus" class="status-suspended">⏸️ Status: Suspended</span>
         <span id="currentBlockDisplay" class="block-display">Block: --</span>
         <span id="lastUpdateTime" class="last-update">Last update: --</span>
       </div>
@@ -102,6 +108,7 @@
         <div id="nextBlockPrediction" class="pred-badge none">⏳ စောင့်ဆိုင်းဆဲ...</div>
         <div style="font-size:14px; color:#94a3b8;" id="predictionDetail">လုံလောက်သော ဒေတာမရှိသေးပါ</div>
         <div style="font-size:12px; color:#64748b;" id="blockInfo">Started from: -- | Current: --</div>
+        <div id="waitingMessage" class="waiting-message" style="display:none;">⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... <span class="loading-dots"></span></div>
       </div>
 
       <h3 style="color:#60a5fa;">📊 Matrix Trend Map (Big Road)</h3>
@@ -135,13 +142,15 @@
 <script>
 // ===== MAIN APPLICATION LOGIC =====
 let liveIntervalId = null;
-let currentTrackingBlock = 84423206;  // Default to user's requested block
+let currentTrackingBlock = 84424346;
 let trackedResults = [];
 let nextCalculatedBet = "Waiting";
 let isRunning = false;
 let fetchAttempts = 0;
 let errorCount = 0;
-let userRequestedBlock = 84423206;
+let userRequestedBlock = 84424346;
+let isWaitingForData = false;
+let waitingTimeout = null;
 
 // ===== DATA STORAGE FUNCTIONS =====
 function saveData() {
@@ -156,7 +165,6 @@ function saveData() {
 
 function loadData() {
   try {
-    // First check if there's a user-requested block from input
     const inputBlock = document.getElementById("startBlock").value.trim();
     if (inputBlock && !isNaN(inputBlock) && parseInt(inputBlock) > 0) {
       userRequestedBlock = parseInt(inputBlock);
@@ -164,7 +172,6 @@ function loadData() {
     }
     
     const storedBlock = localStorage.getItem("savedTargetBlock");
-    // Only use stored block if user hasn't specified a new one
     if (storedBlock && !inputBlock) {
       currentTrackingBlock = parseInt(storedBlock);
       document.getElementById("startBlock").value = currentTrackingBlock;
@@ -199,10 +206,8 @@ function loadData() {
       document.getElementById("startBlock").value = currentTrackingBlock;
     }
     
-    // Update block info
     document.getElementById("blockInfo").innerText = `Started from: ${document.getElementById("startBlock").value} | Current: ${currentTrackingBlock}`;
     
-    // Show warning if using cached data
     if (trackedResults.length > 0 && localStorage.getItem("savedTrackedResults")) {
       document.getElementById("warningBox").classList.add("show");
     }
@@ -215,9 +220,8 @@ window.addEventListener('DOMContentLoaded', () => {
   if (activeKey) {
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("appBox").classList.remove("hidden");
-    // Set default block
-    document.getElementById("startBlock").value = 84423206;
-    currentTrackingBlock = 84423206;
+    document.getElementById("startBlock").value = 84424346;
+    currentTrackingBlock = 84424346;
     loadData();
   }
 });
@@ -228,8 +232,8 @@ function verifyKey() {
     localStorage.setItem("activeKey", key);
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("appBox").classList.remove("hidden");
-    document.getElementById("startBlock").value = 84423206;
-    currentTrackingBlock = 84423206;
+    document.getElementById("startBlock").value = 84424346;
+    currentTrackingBlock = 84424346;
     loadData();
   } else {
     document.getElementById("error").innerText = "Enter any key to continue";
@@ -326,12 +330,15 @@ function recalculateAllPredictions() {
 function updatePredictionDisplay() {
   const predBox = document.getElementById("nextBlockPrediction");
   const detailEl = document.getElementById("predictionDetail");
+  const waitingMsg = document.getElementById("waitingMessage");
   
   if (nextCalculatedBet === "Waiting" || trackedResults.length < 7) {
-    predBox.className = "pred-badge none";
-    predBox.innerText = "⏳ စောင့်ဆိုင်းဆဲ...";
+    predBox.className = "pred-badge waiting";
+    predBox.innerText = "⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ...";
     detailEl.innerText = `ဒေတာ ${trackedResults.length}/7 ရှိပါသည်`;
+    waitingMsg.style.display = "block";
   } else {
+    waitingMsg.style.display = "none";
     predBox.className = "pred-badge";
     if (nextCalculatedBet === "Big") {
       predBox.style.background = "linear-gradient(135deg, #ef4444, #dc2626)";
@@ -441,10 +448,34 @@ function updateTableDisplay() {
   document.getElementById("output").innerHTML = table + "</tbody></table>";
 }
 
+// ===== SHOW WAITING MESSAGE =====
+function showWaitingMessage() {
+  const statusEl = document.getElementById("liveStatus");
+  statusEl.className = "status-waiting";
+  statusEl.innerText = "⏳ Status: Waiting for data...";
+  
+  const waitingMsg = document.getElementById("waitingMessage");
+  waitingMsg.style.display = "block";
+  waitingMsg.innerHTML = "⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... <span class='loading-dots'></span>";
+}
+
+function hideWaitingMessage() {
+  const statusEl = document.getElementById("liveStatus");
+  if (isRunning) {
+    statusEl.className = "status-running";
+    statusEl.innerText = "▶️ Status: Running";
+  }
+  const waitingMsg = document.getElementById("waitingMessage");
+  waitingMsg.style.display = "none";
+}
+
 // ===== FETCH BLOCK DATA =====
 async function fetchNextLiveBlock() {
   const maxHistory = parseInt(document.getElementById("count").value) || 300;
   const currentBlock = currentTrackingBlock;
+  
+  // Show waiting message
+  showWaitingMessage();
   
   try {
     const controller = new AbortController();
@@ -465,7 +496,6 @@ async function fetchNextLiveBlock() {
     if (data.blockID) {
       const analysis = analyzeHashData(data.blockID);
       
-      // Check if this block already exists
       const exists = trackedResults.some(r => r.blockNum === currentBlock);
       if (!exists) {
         trackedResults.push({
@@ -490,7 +520,6 @@ async function fetchNextLiveBlock() {
         document.getElementById("currentBlockDisplay").innerText = `Block: ${currentBlock}`;
         document.getElementById("lastUpdateTime").innerText = `Last update: ${new Date().toLocaleTimeString()}`;
         
-        // Get the starting block from the first result
         const startBlock = trackedResults.length > 0 ? trackedResults[0].blockNum : currentBlock;
         document.getElementById("blockInfo").innerText = `Started from: ${startBlock} | Current: ${currentBlock}`;
         
@@ -500,17 +529,20 @@ async function fetchNextLiveBlock() {
         errorCount = 0;
         fetchAttempts = 0;
         
+        // Hide waiting message on success
+        hideWaitingMessage();
+        
         const statusEl = document.getElementById("liveStatus");
         statusEl.className = "status-running";
-        statusEl.innerText = "Status: Running";
+        statusEl.innerText = "▶️ Status: Running";
         
-        // Hide warning once data is loading
         document.getElementById("warningBox").classList.remove("show");
       } else {
-        // Block already exists, skip and increment
         currentTrackingBlock += 20;
         document.getElementById("startBlock").value = currentTrackingBlock;
         saveData();
+        // Still hide waiting on success
+        hideWaitingMessage();
       }
     } else {
       throw new Error("No blockID in response");
@@ -520,11 +552,10 @@ async function fetchNextLiveBlock() {
     errorCount++;
     fetchAttempts++;
     
-    if (errorCount >= 3) {
-      const statusEl = document.getElementById("liveStatus");
-      statusEl.className = "status-error";
-      statusEl.innerText = "⚠️ Connection Error - Retrying...";
-    }
+    // Show waiting message with retry info
+    const waitingMsg = document.getElementById("waitingMessage");
+    waitingMsg.style.display = "block";
+    waitingMsg.innerHTML = `⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... (အကြိမ် ${fetchAttempts}) <span class='loading-dots'></span>`;
     
     // Try alternative API with retry
     if (fetchAttempts < 5) {
@@ -564,19 +595,27 @@ async function fetchNextLiveBlock() {
               errorCount = 0;
               fetchAttempts = 0;
               document.getElementById("warningBox").classList.remove("show");
+              hideWaitingMessage();
             }
           }
         }
       } catch (altError) {
         console.log("Alternative fetch failed:", altError);
+        // Keep showing waiting message
+        waitingMsg.innerHTML = `⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... (ပြန်လည်ချိတ်ဆက်နေပါ) <span class='loading-dots'></span>`;
       }
+    } else {
+      // Too many attempts, show error but keep waiting message
+      waitingMsg.innerHTML = `⏳ Live Result ကိုစောင့်ဆိုင်းနေပါ... (ချိတ်ဆက်မှုပြတ်တောက်နေပါ) <span class='loading-dots'></span>`;
+      const statusEl = document.getElementById("liveStatus");
+      statusEl.className = "status-waiting";
+      statusEl.innerText = "⏳ Status: ပြန်လည်ချိတ်ဆက်နေပါ...";
     }
   }
 }
 
 // ===== CONTROL FUNCTIONS =====
 function startLiveTracking() {
-  // IMPORTANT: ALWAYS use the user's input value
   const inputBlock = document.getElementById("startBlock").value.trim();
   if (inputBlock && !isNaN(inputBlock) && parseInt(inputBlock) > 0) {
     const newBlock = parseInt(inputBlock);
@@ -584,9 +623,7 @@ function startLiveTracking() {
     userRequestedBlock = newBlock;
     document.getElementById("blockInfo").innerText = `Started from: ${newBlock} | Current: ${newBlock}`;
     
-    // Clear old data if user wants to start from a different block
     if (trackedResults.length > 0 && trackedResults[0].blockNum !== newBlock) {
-      // User changed start block, clear old data
       trackedResults = [];
       document.getElementById("output").innerHTML = "<p style='color:#94a3b8; text-align:center;'>Starting fresh from " + newBlock + "...</p>";
       document.getElementById("roadMapTable").innerHTML = "";
@@ -595,18 +632,15 @@ function startLiveTracking() {
       document.getElementById("totalCount").innerText = "0";
       document.getElementById("lastResult").innerText = "--";
       updatePredictionDisplay();
-      // Clear localStorage for this session
       localStorage.removeItem("savedTrackedResults");
       localStorage.removeItem("savedLastBlock");
     }
   } else {
-    // Use default if input is empty or invalid
-    currentTrackingBlock = 84423206;
+    currentTrackingBlock = 84424346;
     document.getElementById("startBlock").value = currentTrackingBlock;
     document.getElementById("blockInfo").innerText = `Started from: ${currentTrackingBlock} (default) | Current: ${currentTrackingBlock}`;
   }
   
-  // Hide warning
   document.getElementById("warningBox").classList.remove("show");
   
   if (isRunning) {
@@ -618,18 +652,19 @@ function startLiveTracking() {
   errorCount = 0;
   fetchAttempts = 0;
   
-  // Save the user's requested block
+  // Show waiting message immediately
+  showWaitingMessage();
+  
   saveData();
   
   if (!liveIntervalId) {
     liveIntervalId = setInterval(fetchNextLiveBlock, 1500);
-    // Fetch immediately
     fetchNextLiveBlock();
   }
   
   const statusEl = document.getElementById("liveStatus");
-  statusEl.className = "status-running";
-  statusEl.innerText = "Status: Running";
+  statusEl.className = "status-waiting";
+  statusEl.innerText = "⏳ Status: စောင့်ဆိုင်းနေပါ...";
   
   document.getElementById("btnStart").style.background = "#15803d";
   document.getElementById("btnStart").innerText = "⏳ Running...";
@@ -644,7 +679,10 @@ function stopLiveTracking() {
   
   const statusEl = document.getElementById("liveStatus");
   statusEl.className = "status-suspended";
-  statusEl.innerText = "Status: Suspended";
+  statusEl.innerText = "⏸️ Status: Suspended";
+  
+  const waitingMsg = document.getElementById("waitingMessage");
+  waitingMsg.style.display = "none";
   
   document.getElementById("btnStart").style.background = "#22c55e";
   document.getElementById("btnStart").innerText = "▶️ Start Stream";
@@ -654,6 +692,8 @@ function stopLiveTracking() {
 
 function forceRefresh() {
   if (isRunning) {
+    fetchAttempts = 0;
+    errorCount = 0;
     fetchNextLiveBlock();
     document.getElementById("lastUpdateTime").innerText = `Manual refresh: ${new Date().toLocaleTimeString()}`;
   } else {
@@ -663,9 +703,8 @@ function forceRefresh() {
 
 function clearStoredData() {
   if (confirm("Clear all cached data? This will start fresh from your current block.")) {
-    // Get current input value before clearing
     const inputBlock = document.getElementById("startBlock").value.trim();
-    let startBlock = 84423206;
+    let startBlock = 84424346;
     if (inputBlock && !isNaN(inputBlock) && parseInt(inputBlock) > 0) {
       startBlock = parseInt(inputBlock);
     }
@@ -685,10 +724,10 @@ function clearStoredData() {
     document.getElementById("output").innerHTML = "<p style='color:#94a3b8; text-align:center;'>ဒေတာရှင်းလင်းပြီးပါပြီ</p>";
     document.getElementById("currentBlockDisplay").innerText = `Block: ${startBlock}`;
     document.getElementById("warningBox").classList.remove("show");
+    document.getElementById("waitingMessage").style.display = "none";
     updatePredictionDisplay();
     stopLiveTracking();
     
-    // Save the new starting block
     saveData();
     location.reload();
   }
@@ -716,13 +755,13 @@ setInterval(() => {
   }
 }, 30000);
 
-console.log("✅ Premium Lottery Analysis Tool v51 Loaded Successfully");
+console.log("✅ Premium Lottery Analysis Tool v52 Loaded Successfully");
 console.log("📊 B = အနီရောင်, S = အစိမ်းရောင်");
 console.log("🔄 Auto-refresh every 1.5 seconds");
 console.log(`📈 Tracked Results: ${trackedResults.length}`);
 console.log("⌨️ Press 'R' key to force refresh");
 console.log("📦 Starting from block:", currentTrackingBlock);
-console.log("💡 If using cached data, click 'Clear Cache' to start fresh");
+console.log("💡 Showing 'Live Result ကိုစောင့်ဆိုင်းနေပါ...' while waiting");
 </script>
 </body>
 </html>
