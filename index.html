@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Lottery Analysis Tool v47</title>
+  <title>Premium Lottery Analysis Tool v48</title>
   <style>
     :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f8fafc; --accent-red: #ef4444; --accent-blue: #3b82f6; --border-color: #334155; }
     body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px; max-width: 1200px; margin: 0 auto; }
@@ -25,24 +25,25 @@
     .road-map-table { border-collapse: collapse; margin: 0 auto; }
     .road-map-table td { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border-color); text-align: center; vertical-align: middle; }
     .circle { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; color: white; }
-    .circle.color-green { background: linear-gradient(135deg, #4ade80, #22c55e); }
-    .circle.color-red { background: linear-gradient(135deg, #f87171, #ef4444); }
+    /* B = အနီရောင်, S = အစိမ်းရောင် */
+    .circle.color-big { background: linear-gradient(135deg, #ef4444, #dc2626); }  /* အနီ */
+    .circle.color-small { background: linear-gradient(135deg, #22c55e, #16a34a); }  /* အစိမ်း */
     .circle.color-purple { background: linear-gradient(135deg, #c084fc, #a855f7); }
     .circle.color-skip { background: #475569; }
     .stats-counter { display: flex; gap: 20px; margin-top: 15px; font-weight: bold; background: #0f172a; padding: 10px 15px; border-radius: 8px; }
-    .stat-b { color: #f87171; }
-    .stat-s { color: #60a5fa; }
+    .stat-b { color: #ef4444; }  /* အနီ */
+    .stat-s { color: #22c55e; }  /* အစိမ်း */
     .prediction-panel { background: #0f172a; border-radius: 12px; padding: 25px 15px; margin-top: 15px; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 10px; }
     .pred-badge { font-size: 24px; font-weight: bold; padding: 14px 40px; border-radius: 16px; color: white; min-width: 260px; text-align: center; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
     .pred-badge.none { background: #334155; }
     .big-digit-display { font-size: 22px; font-weight: 700; display: block; }
-    .win-match { color: #4ade80; }
-    .win-miss { color: #f87171; }
+    .win-match { color: #22c55e; }  /* အစိမ်း */
+    .win-miss { color: #ef4444; }   /* အနီ */
     .iframe-container { width: 100%; height: 750px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #000; }
     .iframe-container iframe { width: 100%; height: 100%; border: 0; display: block; }
     #liveStatus { font-weight: bold; padding: 6px 12px; border-radius: 6px; display: inline-block; margin-top: 8px; }
     .status-suspended { background: #334155; color: #94a3b8; }
-    .status-running { background: #15803d; color: #4ade80; animation: pulse 2s infinite; }
+    .status-running { background: #15803d; color: #22c55e; animation: pulse 2s infinite; }
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
     .block-display { font-size: 14px; color: #94a3b8; margin-top: 5px; }
   </style>
@@ -201,9 +202,8 @@ function analyzeHashData(blockHash) {
   }
   if (targetDigit === null) return { result: "Skip", colorClass: "color-skip", digit: "-" };
   const resText = (targetDigit >= 5) ? "Big" : "Small";
-  let color = "color-purple";
-  if ([1,3,7,9].includes(targetDigit)) color = "color-green";
-  if ([2,4,6,8].includes(targetDigit)) color = "color-red";
+  // B = အနီ (color-big), S = အစိမ်း (color-small)
+  let color = (resText === "Big") ? "color-big" : "color-small";
   return { result: resText, colorClass: color, digit: targetDigit };
 }
 
@@ -336,10 +336,17 @@ function updateTrendBoard() {
       let cell = (c < cols) ? grid[r][c] : "";
       let displayText = "";
       if (cell) {
-        if (cell.appResult === "Big") displayText = "B";
-        else if (cell.appResult === "Small") displayText = "S";
-        else displayText = "?";
-        html += `<td><div class="circle ${cell.colorClass}">${displayText}</div></td>`;
+        if (cell.appResult === "Big") {
+          displayText = "B";
+          // B = အနီ (color-big)
+          html += `<td><div class="circle color-big">${displayText}</div></td>`;
+        } else if (cell.appResult === "Small") {
+          displayText = "S";
+          // S = အစိမ်း (color-small)
+          html += `<td><div class="circle color-small">${displayText}</div></td>`;
+        } else {
+          html += `<td></td>`;
+        }
       } else {
         html += `<td></td>`;
       }
@@ -519,8 +526,9 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-console.log("✅ Premium Lottery Analysis Tool v47 Loaded Successfully");
-console.log(`📊 Tracked Results: ${trackedResults.length}`);
+console.log("✅ Premium Lottery Analysis Tool v48 Loaded Successfully");
+console.log("📊 B = အနီရောင်, S = အစိမ်းရောင်");
+console.log(`📈 Tracked Results: ${trackedResults.length}`);
 </script>
 </body>
 </html>
