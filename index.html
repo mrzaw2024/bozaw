@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Lottery Analysis Tool v50</title>
+  <title>Premium Lottery Analysis Tool v51</title>
   <style>
     :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f8fafc; --accent-red: #ef4444; --accent-blue: #3b82f6; --border-color: #334155; }
     body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px; max-width: 1200px; margin: 0 auto; }
@@ -51,6 +51,8 @@
     .last-update { font-size: 13px; color: #94a3b8; margin-top: 5px; }
     .refresh-btn { background: #3b82f6; padding: 8px 16px; border-radius: 6px; border: none; color: white; cursor: pointer; font-size: 13px; }
     .input-hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .warning-box { background: #7f1d1d; padding: 10px 15px; border-radius: 8px; margin-top: 10px; color: #f87171; display: none; }
+    .warning-box.show { display: block; }
   </style>
 </head>
 <body>
@@ -73,9 +75,12 @@
   <div id="blockAnalysis" class="tab-content active">
     <div class="box">
       <div class="title">📈 Auto-Tracking Stream</div>
+      
+      <div id="warningBox" class="warning-box">⚠️ Warning: Using cached data. Click Clear Cache to start fresh.</div>
+      
       <label>📦 Target Block Sequence:</label>
-      <input type="number" id="startBlock" value="84420346" placeholder="Enter block number e.g. 84420346">
-      <div class="input-hint">💡 Enter the block number you want to start from (e.g., 84420346)</div>
+      <input type="number" id="startBlock" value="84423206" placeholder="Enter block number e.g. 84423206">
+      <div class="input-hint">💡 Enter the block number you want to start from (e.g., 84423206)</div>
       
       <label>🔢 Max Stream Frame Count:</label>
       <input type="number" id="count" value="300">
@@ -96,7 +101,7 @@
       <div class="prediction-panel">
         <div id="nextBlockPrediction" class="pred-badge none">⏳ စောင့်ဆိုင်းဆဲ...</div>
         <div style="font-size:14px; color:#94a3b8;" id="predictionDetail">လုံလောက်သော ဒေတာမရှိသေးပါ</div>
-        <div style="font-size:12px; color:#64748b;" id="blockInfo">Starting from: --</div>
+        <div style="font-size:12px; color:#64748b;" id="blockInfo">Started from: -- | Current: --</div>
       </div>
 
       <h3 style="color:#60a5fa;">📊 Matrix Trend Map (Big Road)</h3>
@@ -130,14 +135,13 @@
 <script>
 // ===== MAIN APPLICATION LOGIC =====
 let liveIntervalId = null;
-let currentTrackingBlock = 84420346;
+let currentTrackingBlock = 84423206;  // Default to user's requested block
 let trackedResults = [];
 let nextCalculatedBet = "Waiting";
 let isRunning = false;
 let fetchAttempts = 0;
-let lastFetchTime = null;
 let errorCount = 0;
-let isFirstRun = true;
+let userRequestedBlock = 84423206;
 
 // ===== DATA STORAGE FUNCTIONS =====
 function saveData() {
@@ -152,12 +156,20 @@ function saveData() {
 
 function loadData() {
   try {
+    // First check if there's a user-requested block from input
+    const inputBlock = document.getElementById("startBlock").value.trim();
+    if (inputBlock && !isNaN(inputBlock) && parseInt(inputBlock) > 0) {
+      userRequestedBlock = parseInt(inputBlock);
+      currentTrackingBlock = userRequestedBlock;
+    }
+    
     const storedBlock = localStorage.getItem("savedTargetBlock");
-    if (storedBlock) {
+    // Only use stored block if user hasn't specified a new one
+    if (storedBlock && !inputBlock) {
       currentTrackingBlock = parseInt(storedBlock);
       document.getElementById("startBlock").value = currentTrackingBlock;
-      document.getElementById("blockInfo").innerText = `Starting from: ${currentTrackingBlock}`;
     }
+    
     const storedCount = localStorage.getItem("savedMaxCount");
     if (storedCount) document.getElementById("count").value = storedCount;
     
@@ -169,7 +181,9 @@ function loadData() {
         updateTableDisplay();
         updatePredictionDisplay();
         updateStats();
-        document.getElementById("currentBlockDisplay").innerText = `Block: ${trackedResults[trackedResults.length-1].blockNum}`;
+        const lastBlock = trackedResults[trackedResults.length-1].blockNum;
+        document.getElementById("currentBlockDisplay").innerText = `Block: ${lastBlock}`;
+        document.getElementById("blockInfo").innerText = `Started from: ${trackedResults[0].blockNum} | Current: ${lastBlock}`;
       }
     }
     
@@ -180,10 +194,17 @@ function loadData() {
     }
     
     const storedLastBlock = localStorage.getItem("savedLastBlock");
-    if (storedLastBlock) {
+    if (storedLastBlock && !inputBlock) {
       currentTrackingBlock = parseInt(storedLastBlock);
       document.getElementById("startBlock").value = currentTrackingBlock;
-      document.getElementById("blockInfo").innerText = `Starting from: ${currentTrackingBlock}`;
+    }
+    
+    // Update block info
+    document.getElementById("blockInfo").innerText = `Started from: ${document.getElementById("startBlock").value} | Current: ${currentTrackingBlock}`;
+    
+    // Show warning if using cached data
+    if (trackedResults.length > 0 && localStorage.getItem("savedTrackedResults")) {
+      document.getElementById("warningBox").classList.add("show");
     }
   } catch(e) { console.log("Load error:", e); }
 }
@@ -194,6 +215,9 @@ window.addEventListener('DOMContentLoaded', () => {
   if (activeKey) {
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("appBox").classList.remove("hidden");
+    // Set default block
+    document.getElementById("startBlock").value = 84423206;
+    currentTrackingBlock = 84423206;
     loadData();
   }
 });
@@ -204,6 +228,8 @@ function verifyKey() {
     localStorage.setItem("activeKey", key);
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("appBox").classList.remove("hidden");
+    document.getElementById("startBlock").value = 84423206;
+    currentTrackingBlock = 84423206;
     loadData();
   } else {
     document.getElementById("error").innerText = "Enter any key to continue";
@@ -463,7 +489,10 @@ async function fetchNextLiveBlock() {
 
         document.getElementById("currentBlockDisplay").innerText = `Block: ${currentBlock}`;
         document.getElementById("lastUpdateTime").innerText = `Last update: ${new Date().toLocaleTimeString()}`;
-        document.getElementById("blockInfo").innerText = `Started from: ${document.getElementById("startBlock").value} | Current: ${currentBlock}`;
+        
+        // Get the starting block from the first result
+        const startBlock = trackedResults.length > 0 ? trackedResults[0].blockNum : currentBlock;
+        document.getElementById("blockInfo").innerText = `Started from: ${startBlock} | Current: ${currentBlock}`;
         
         currentTrackingBlock += 20;
         document.getElementById("startBlock").value = currentTrackingBlock;
@@ -474,6 +503,9 @@ async function fetchNextLiveBlock() {
         const statusEl = document.getElementById("liveStatus");
         statusEl.className = "status-running";
         statusEl.innerText = "Status: Running";
+        
+        // Hide warning once data is loading
+        document.getElementById("warningBox").classList.remove("show");
       } else {
         // Block already exists, skip and increment
         currentTrackingBlock += 20;
@@ -526,10 +558,12 @@ async function fetchNextLiveBlock() {
               document.getElementById("startBlock").value = currentTrackingBlock;
               document.getElementById("currentBlockDisplay").innerText = `Block: ${currentBlock}`;
               document.getElementById("lastUpdateTime").innerText = `Last update: ${new Date().toLocaleTimeString()}`;
-              document.getElementById("blockInfo").innerText = `Started from: ${document.getElementById("startBlock").value} | Current: ${currentBlock}`;
+              const startBlock = trackedResults.length > 0 ? trackedResults[0].blockNum : currentBlock;
+              document.getElementById("blockInfo").innerText = `Started from: ${startBlock} | Current: ${currentBlock}`;
               saveData();
               errorCount = 0;
               fetchAttempts = 0;
+              document.getElementById("warningBox").classList.remove("show");
             }
           }
         }
@@ -542,17 +576,38 @@ async function fetchNextLiveBlock() {
 
 // ===== CONTROL FUNCTIONS =====
 function startLiveTracking() {
-  // Get the block number from input field
+  // IMPORTANT: ALWAYS use the user's input value
   const inputBlock = document.getElementById("startBlock").value.trim();
   if (inputBlock && !isNaN(inputBlock) && parseInt(inputBlock) > 0) {
-    currentTrackingBlock = parseInt(inputBlock);
-    document.getElementById("blockInfo").innerText = `Starting from: ${currentTrackingBlock}`;
+    const newBlock = parseInt(inputBlock);
+    currentTrackingBlock = newBlock;
+    userRequestedBlock = newBlock;
+    document.getElementById("blockInfo").innerText = `Started from: ${newBlock} | Current: ${newBlock}`;
+    
+    // Clear old data if user wants to start from a different block
+    if (trackedResults.length > 0 && trackedResults[0].blockNum !== newBlock) {
+      // User changed start block, clear old data
+      trackedResults = [];
+      document.getElementById("output").innerHTML = "<p style='color:#94a3b8; text-align:center;'>Starting fresh from " + newBlock + "...</p>";
+      document.getElementById("roadMapTable").innerHTML = "";
+      document.getElementById("countBig").innerText = "0";
+      document.getElementById("countSmall").innerText = "0";
+      document.getElementById("totalCount").innerText = "0";
+      document.getElementById("lastResult").innerText = "--";
+      updatePredictionDisplay();
+      // Clear localStorage for this session
+      localStorage.removeItem("savedTrackedResults");
+      localStorage.removeItem("savedLastBlock");
+    }
   } else {
     // Use default if input is empty or invalid
-    currentTrackingBlock = 84420346;
+    currentTrackingBlock = 84423206;
     document.getElementById("startBlock").value = currentTrackingBlock;
-    document.getElementById("blockInfo").innerText = `Starting from: ${currentTrackingBlock} (default)`;
+    document.getElementById("blockInfo").innerText = `Started from: ${currentTrackingBlock} (default) | Current: ${currentTrackingBlock}`;
   }
+  
+  // Hide warning
+  document.getElementById("warningBox").classList.remove("show");
   
   if (isRunning) {
     console.log("Already running");
@@ -562,17 +617,9 @@ function startLiveTracking() {
   isRunning = true;
   errorCount = 0;
   fetchAttempts = 0;
-  isFirstRun = false;
   
-  // Clear previous results if user wants fresh start
-  // Uncomment if you want to clear data on each start
-  // trackedResults = [];
-  
-  // Load existing data first
-  loadData();
-  
-  // Set the block from input
-  document.getElementById("startBlock").value = currentTrackingBlock;
+  // Save the user's requested block
+  saveData();
   
   if (!liveIntervalId) {
     liveIntervalId = setInterval(fetchNextLiveBlock, 1500);
@@ -586,8 +633,6 @@ function startLiveTracking() {
   
   document.getElementById("btnStart").style.background = "#15803d";
   document.getElementById("btnStart").innerText = "⏳ Running...";
-  
-  saveData();
 }
 
 function stopLiveTracking() {
@@ -609,37 +654,42 @@ function stopLiveTracking() {
 
 function forceRefresh() {
   if (isRunning) {
-    // Force fetch immediately with current block
     fetchNextLiveBlock();
     document.getElementById("lastUpdateTime").innerText = `Manual refresh: ${new Date().toLocaleTimeString()}`;
   } else {
-    // Start if not running
     startLiveTracking();
   }
 }
 
 function clearStoredData() {
-  if (confirm("Clear all cached data?")) {
+  if (confirm("Clear all cached data? This will start fresh from your current block.")) {
+    // Get current input value before clearing
+    const inputBlock = document.getElementById("startBlock").value.trim();
+    let startBlock = 84423206;
+    if (inputBlock && !isNaN(inputBlock) && parseInt(inputBlock) > 0) {
+      startBlock = parseInt(inputBlock);
+    }
+    
     localStorage.clear();
     trackedResults = [];
     nextCalculatedBet = "Waiting";
-    const inputBlock = document.getElementById("startBlock").value.trim();
-    if (inputBlock && !isNaN(inputBlock) && parseInt(inputBlock) > 0) {
-      currentTrackingBlock = parseInt(inputBlock);
-    } else {
-      currentTrackingBlock = 84420346;
-      document.getElementById("startBlock").value = currentTrackingBlock;
-    }
-    document.getElementById("blockInfo").innerText = `Starting from: ${currentTrackingBlock}`;
+    currentTrackingBlock = startBlock;
+    userRequestedBlock = startBlock;
+    document.getElementById("startBlock").value = startBlock;
+    document.getElementById("blockInfo").innerText = `Started from: ${startBlock} | Current: ${startBlock}`;
     document.getElementById("countBig").innerText = "0";
     document.getElementById("countSmall").innerText = "0";
     document.getElementById("totalCount").innerText = "0";
     document.getElementById("lastResult").innerText = "--";
     document.getElementById("roadMapTable").innerHTML = "";
     document.getElementById("output").innerHTML = "<p style='color:#94a3b8; text-align:center;'>ဒေတာရှင်းလင်းပြီးပါပြီ</p>";
-    document.getElementById("currentBlockDisplay").innerText = "Block: --";
+    document.getElementById("currentBlockDisplay").innerText = `Block: ${startBlock}`;
+    document.getElementById("warningBox").classList.remove("show");
     updatePredictionDisplay();
     stopLiveTracking();
+    
+    // Save the new starting block
+    saveData();
     location.reload();
   }
 }
@@ -666,12 +716,13 @@ setInterval(() => {
   }
 }, 30000);
 
-console.log("✅ Premium Lottery Analysis Tool v50 Loaded Successfully");
+console.log("✅ Premium Lottery Analysis Tool v51 Loaded Successfully");
 console.log("📊 B = အနီရောင်, S = အစိမ်းရောင်");
 console.log("🔄 Auto-refresh every 1.5 seconds");
 console.log(`📈 Tracked Results: ${trackedResults.length}`);
 console.log("⌨️ Press 'R' key to force refresh");
 console.log("📦 Starting from block:", currentTrackingBlock);
+console.log("💡 If using cached data, click 'Clear Cache' to start fresh");
 </script>
 </body>
 </html>
